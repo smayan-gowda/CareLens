@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // 1. Primitive Helpers (Phase 3)
+    // -------------------------------------------------------------------------
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // -------------------------------------------------------------------------
+    // 2. Validation Blueprints (Pillar 2)
+    // -------------------------------------------------------------------------
+    
+    function isValidProfile(data) {
+      return data.keys().hasAll(['name', 'email'])
+        && data.name is string && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 100;
+    }
+    
+    function isValidHome(data) {
+      return data.keys().hasAll(['userId', 'name', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+    
+    function isValidScan(data) {
+      return data.keys().hasAll(['userId', 'roomId', 'homeId', 'status', 'createdAt'])
+        && data.userId == request.auth.uid
+        && data.roomId is string
+        && data.homeId is string
+        && data.status is string
+        && data.createdAt is string;
+    }
+    
+    function isValidActivity(data) {
+      return data.keys().hasAll(['userId', 'action', 'timestamp'])
+        && data.userId == request.auth.uid
+        && data.action is string
+        && data.timestamp is string;
+    }
+    
+    function isValidTimelineEvent(data) {
+      return data.keys().hasAll(['userId', 'type', 'title', 'timestamp'])
+        && data.userId == request.auth.uid
+        && data.type is string
+        && data.title is string
+        && data.timestamp is string;
+    }
+    
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'type', 'title', 'timestamp', 'isRead'])
+        && data.userId == request.auth.uid
+        && data.type is string
+        && data.title is string
+        && data.timestamp is string
+        && data.isRead is bool;
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Default Deny (Phase 4.1)
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Collection Matches
+    // -------------------------------------------------------------------------
+    
+    match /profiles/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidProfile(incoming());
+      allow update: if isOwner(userId) && isValidProfile(incoming());
+    }
+    
+    match /homes/{homeId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidHome(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidHome(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+    
+    match /scans/{scanId} {
+      allow read: if isSignedIn() && (
+        ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
+      );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidScan(incoming());
+      allow update: if isSignedIn() && (
+        ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
+      ) && isValidScan(incoming());
+      allow delete: if isSignedIn() && (
+        resource == null ||
+        ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
+      );
+    }
+    
+    match /activities/{activityId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidActivity(incoming());
+    }
+    
+    match /timelineEvents/{eventId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidTimelineEvent(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+    
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidNotification(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+    
+    match /savedResources/{savedResourceId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && existing().authorId == request.auth.uid;
+    }
+
+    match /comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && existing().authorId == request.auth.uid;
+    }
+
+    match /likes/{likeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+  }
+}

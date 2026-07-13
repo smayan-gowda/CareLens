@@ -1,0 +1,6 @@
+{
+  "name": "CareLens AI",
+  "description": "An AI-powered home safety platform that acts as an intelligent accessibility assistant to help older adults live safely and independently.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
