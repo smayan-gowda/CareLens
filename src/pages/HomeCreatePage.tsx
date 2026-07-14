@@ -15,13 +15,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { useHomeStore } from "@/stores/useHomeStore";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { ArrowLeft, Check, ChevronRight, Home, UploadCloud } from "lucide-react";
+import { ArrowLeft, Check, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { HomeType } from "@/types/home";
+import { motion } from "motion/react";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(50),
@@ -39,9 +38,19 @@ export function HomeCreatePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { addHome } = useHomeStore();
-  const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
+
+  const getHomeTypeLabel = (val: string) => {
+    switch (val) {
+      case "house": return "Single Family House";
+      case "apartment": return "Apartment";
+      case "condo": return "Condo";
+      case "townhouse": return "Townhouse";
+      case "other": return "Other";
+      default: return "";
+    }
+  };
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as any,
@@ -58,10 +67,10 @@ export function HomeCreatePage() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) {
-      toast.error("You must be logged in to create a home");
+      toast.error("You must be logged in to add a property");
       return;
     }
-    
+
     setIsSubmitting(true);
     
     try {
@@ -71,11 +80,11 @@ export function HomeCreatePage() {
         coverImage: coverImagePreview || undefined,
       });
       
-      toast.success("Home created successfully");
-      navigate("/homes");
+      toast.success("Property added successfully");
+      navigate("/properties");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to create home");
+      toast.error("Failed to add property");
     } finally {
       setIsSubmitting(false);
     }
@@ -84,253 +93,174 @@ export function HomeCreatePage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Create object URL for preview
-      setCoverImagePreview(URL.createObjectURL(file));
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCoverImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-500 pb-12">
+    <div className="max-w-3xl mx-auto space-y-10 pb-12">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/homes")}>
-          <ArrowLeft className="h-5 w-5" />
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate("/properties")}
+          className="text-neutral-500 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" /> Properties
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Create a Home Profile</h1>
-          <p className="text-muted-foreground mt-1">Set up a new digital twin for AI analysis.</p>
-        </div>
       </div>
 
-      <div className="flex items-center justify-center py-6">
-        <div className="flex items-center w-full max-w-sm">
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${step >= 1 ? 'border-primary bg-primary text-primary-foreground' : 'border-muted text-muted-foreground'} font-semibold text-sm`}>
-            1
-          </div>
-          <div className={`flex-1 h-1 mx-2 ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${step >= 2 ? 'border-primary bg-primary text-primary-foreground' : 'border-muted text-muted-foreground'} font-semibold text-sm`}>
-            2
-          </div>
-          <div className={`flex-1 h-1 mx-2 ${step >= 3 ? 'bg-primary' : 'bg-muted'}`} />
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${step >= 3 ? 'border-primary bg-primary text-primary-foreground' : 'border-muted text-muted-foreground'} font-semibold text-sm`}>
-            3
-          </div>
-        </div>
+      <div>
+        <h1 className="text-4xl font-medium tracking-tight mb-2">Setup Property</h1>
+        <p className="text-neutral-500 text-lg font-light">Create a new environment to begin tracking safety metrics.</p>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <Card className="border-primary/10 shadow-sm">
-            {step === 1 && (
-              <div className="animate-in fade-in duration-300">
-                <CardHeader>
-                  <CardTitle>Basic Information</CardTitle>
-                  <CardDescription>Tell us the basics about this property.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Home Name *</FormLabel>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-neutral-900 rounded-3xl p-8 md:p-10 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-8"
+          >
+             <div className="grid md:grid-cols-2 gap-8">
+               <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-neutral-500">Property Name</FormLabel>
+                      <FormControl>
+                        <Input className="h-12 rounded-xl border-neutral-200 dark:border-neutral-800" placeholder="e.g. Primary Residence" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="homeType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-neutral-500">Property Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
-                          <Input placeholder="e.g. Smith Family Home" {...field} />
+                          <SelectTrigger className="h-12 w-full rounded-xl border-neutral-200 dark:border-neutral-800">
+                            <span className="flex flex-1 text-left truncate">
+                              {getHomeTypeLabel(field.value) || "Select type"}
+                            </span>
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="homeType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Home Type *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a home type">
-                                {field.value === "house" ? "Single Family House" :
-                                 field.value === "apartment" ? "Apartment" :
-                                 field.value === "condo" ? "Condominium" :
-                                 field.value === "townhouse" ? "Townhouse" :
-                                 field.value === "other" ? "Other" : null}
-                              </SelectValue>
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="house">Single Family House</SelectItem>
-                            <SelectItem value="apartment">Apartment</SelectItem>
-                            <SelectItem value="condo">Condominium</SelectItem>
-                            <SelectItem value="townhouse">Townhouse</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        <SelectContent className="rounded-xl">
+                          <SelectItem value="house">Single Family House</SelectItem>
+                          <SelectItem value="apartment">Apartment</SelectItem>
+                          <SelectItem value="condo">Condo</SelectItem>
+                          <SelectItem value="townhouse">Townhouse</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Address (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. 123 Main St, Portland, OR" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-                <CardFooter className="flex justify-end border-t pt-6 bg-muted/20">
-                  <Button type="button" onClick={() => form.trigger(['name', 'homeType']).then(v => v && setStep(2))}>
-                    Continue <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </CardFooter>
-              </div>
-            )}
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel className="text-neutral-500">Address (Optional)</FormLabel>
+                      <FormControl>
+                        <Input className="h-12 rounded-xl border-neutral-200 dark:border-neutral-800" placeholder="123 Main St, City, State" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="floors"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-neutral-500">Number of Floors</FormLabel>
+                      <FormControl>
+                        <Input type="number" className="h-12 rounded-xl border-neutral-200 dark:border-neutral-800" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            {step === 2 && (
-              <div className="animate-in slide-in-from-right-4 duration-300">
-                <CardHeader>
-                  <CardTitle>Home Details</CardTitle>
-                  <CardDescription>Help the AI understand the layout of the property.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="floors"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Number of Floors *</FormLabel>
-                          <FormControl>
-                            <Input type="number" min={1} max={10} {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="yearBuilt"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Year Built (Optional)</FormLabel>
-                          <FormControl>
-                            <Input type="number" placeholder="YYYY" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <FormField
-                    control={form.control}
-                    name="nickname"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nickname (Optional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. Mom's House" {...field} />
-                        </FormControl>
-                        <FormDescription>A short familiar name for the dashboard.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notes (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Any specific accessibility concerns or details?" className="resize-none h-24" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-                <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
-                  <Button type="button" variant="outline" onClick={() => setStep(1)}>
-                    Back
-                  </Button>
-                  <Button type="button" onClick={() => form.trigger(['floors', 'yearBuilt']).then(v => v && setStep(3))}>
-                    Continue <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </CardFooter>
-              </div>
-            )}
+                <FormField
+                  control={form.control}
+                  name="yearBuilt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-neutral-500">Year Built (Optional)</FormLabel>
+                      <FormControl>
+                        <Input type="number" className="h-12 rounded-xl border-neutral-200 dark:border-neutral-800" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+             </div>
 
-            {step === 3 && (
-              <div className="animate-in slide-in-from-right-4 duration-300">
-                <CardHeader>
-                  <CardTitle>Customization</CardTitle>
-                  <CardDescription>Personalize this home profile.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <label className="text-sm font-medium block mb-3">Cover Image (Optional)</label>
-                    {coverImagePreview ? (
-                      <div className="relative rounded-xl overflow-hidden border">
-                        <img src={coverImagePreview} alt="Preview" className="w-full h-48 object-cover" />
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                          <Button type="button" variant="secondary" onClick={() => document.getElementById('cover-upload')?.click()}>
-                            Change Image
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div 
-                        className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors hover:bg-muted/50 cursor-pointer"
-                        onClick={() => document.getElementById('cover-upload')?.click()}
-                      >
-                        <div className="bg-primary/5 p-3 rounded-full mb-3">
-                          <UploadCloud className="h-6 w-6 text-primary" />
-                        </div>
-                        <p className="font-medium">Upload a cover photo</p>
-                        <p className="text-xs text-muted-foreground mt-1">Make this home easily recognizable</p>
-                      </div>
-                    )}
-                    <input 
-                      id="cover-upload" 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleImageUpload}
-                    />
-                  </div>
-                  
-                  <div className="bg-muted/50 p-4 rounded-lg flex items-start gap-3 border">
-                    <Home className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-medium">Ready to create</h4>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        After creating this profile, you'll be able to add individual rooms and upload photos for AI safety analysis.
-                      </p>
+             <div>
+                <label className="text-sm font-medium block mb-3 text-neutral-500">Cover Photo (Optional)</label>
+                {coverImagePreview ? (
+                  <div className="relative rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-800 h-64 group cursor-pointer" onClick={() => document.getElementById('cover-upload')?.click()}>
+                    <img src={coverImagePreview} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                       <span className="text-white font-medium">Change Photo</span>
                     </div>
                   </div>
-                </CardContent>
-                <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
-                  <Button type="button" variant="outline" onClick={() => setStep(2)} disabled={isSubmitting}>
-                    Back
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Creating..." : "Create Home Profile"}
-                    {!isSubmitting && <Check className="ml-2 h-4 w-4" />}
-                  </Button>
-                </CardFooter>
+                ) : (
+                  <div 
+                    className="h-64 border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-2xl flex flex-col items-center justify-center text-center transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer"
+                    onClick={() => document.getElementById('cover-upload')?.click()}
+                  >
+                    <div className="w-16 h-16 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center mb-4">
+                      <Camera className="h-6 w-6 text-neutral-400" />
+                    </div>
+                    <p className="font-medium">Add a photo</p>
+                    <p className="text-sm text-neutral-500 mt-1 max-w-xs">Upload a clear photo to help identify this property</p>
+                  </div>
+                )}
+                <input 
+                   id="cover-upload" 
+                   type="file" 
+                   accept="image/*" 
+                   className="hidden" 
+                   onChange={handleImageUpload}
+                />
               </div>
-            )}
-          </Card>
+          </motion.div>
+
+          <div className="flex justify-end gap-4">
+            <Button 
+              type="button" 
+              variant="ghost" 
+              className="rounded-full h-12 px-6"
+              onClick={() => navigate("/properties")} 
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="rounded-full h-12 px-8 bg-black text-white shadow-lg transition-transform hover:scale-105"
+            >
+              {isSubmitting ? "Creating..." : "Create Property"}
+            </Button>
+          </div>
+          
         </form>
       </Form>
     </div>

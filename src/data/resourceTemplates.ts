@@ -446,16 +446,59 @@ export const getAreaCodeForCity = (cityName: string): string => {
   return "214"; // Default Texas/general fallback
 };
 
+export const getZipCodeForCity = (cityName: string): string => {
+  const norm = cityName.toLowerCase();
+  if (norm.includes("frisco")) return "75034";
+  if (norm.includes("austin")) return "78701";
+  if (norm.includes("plano")) return "75023";
+  if (norm.includes("dallas")) return "75201";
+  if (norm.includes("fort worth")) return "76101";
+  if (norm.includes("new york") || norm.includes("ny")) return "10001";
+  if (norm.includes("san francisco") || norm.includes("sf")) return "94101";
+  if (norm.includes("los angeles") || norm.includes("la")) return "90001";
+  if (norm.includes("chicago")) return "60601";
+  if (norm.includes("seattle")) return "98101";
+  if (norm.includes("miami")) return "33101";
+  if (norm.includes("houston")) return "77002";
+  return "78701"; // default general fallback ZIP
+};
+
+const STREET_NAMES = [
+  "Lamar Blvd", "Congress Ave", "Guadalupe St", "Research Blvd",
+  "Burnet Rd", "Brodie Ln", "Anderson Ln", "South Congress",
+  "Safety Way", "Main St", "Broadway", "Pine Street",
+  "Oak Road", "Cedar Ave", "Elm Blvd", "Maple Drive",
+  "Parkway Trail", "Industrial Pkwy", "Commerce St", "Sunset Blvd"
+];
+
 // Generate realistic custom fallback lists when the Overpass API is rate limited
 export const generateLocalizedFallbackBusinesses = (lat: number, lng: number, cityName: string) => {
   const areaCode = getAreaCodeForCity(cityName);
+  const zip = getZipCodeForCity(cityName);
+
   return MOCK_BUSINESS_TEMPLATES.map((biz) => {
     const computedLat = lat + biz.relativeLatOffset;
     const computedLng = lng + biz.relativeLngOffset;
     const distance = calculateDistance(lat, lng, computedLat, computedLng);
     
     const streetNum = Math.floor(Math.abs(biz.relativeLatOffset * 10000)) + 120;
-    const computedAddress = `${streetNum} Safety Way, ${cityName}`;
+    
+    // Deterministically pick a realistic street name based on the business ID
+    const streetIndex = Math.abs(biz.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % STREET_NAMES.length;
+    const streetName = STREET_NAMES[streetIndex];
+
+    // Build fully qualified address string
+    let fullCityStateZip = cityName;
+    if (!cityName.includes(",") && !cityName.includes("TX") && !cityName.includes("CA") && !cityName.includes("NY")) {
+      fullCityStateZip = `${cityName}, TX ${zip}`;
+    } else if (cityName.includes(",") && !/\d{5}/.test(cityName)) {
+      // If it has city and state but no ZIP, append the ZIP
+      fullCityStateZip = `${cityName} ${zip}`;
+    } else if (!/\d{5}/.test(cityName)) {
+      fullCityStateZip = `${cityName} ${zip}`;
+    }
+
+    const computedAddress = `${streetNum} ${streetName}, ${fullCityStateZip}`;
 
     // Dynamically localize phone number area code
     const localizedPhone = biz.phone.replace(/^\(512\)/, `(${areaCode})`);

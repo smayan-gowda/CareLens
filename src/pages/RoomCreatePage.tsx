@@ -15,12 +15,11 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { useHomeStore } from "@/stores/useHomeStore";
-import { ArrowLeft, Check, UploadCloud } from "lucide-react";
+import { ArrowLeft, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { RoomType } from "@/types/home";
+import { motion } from "motion/react";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(50),
@@ -38,6 +37,20 @@ export function RoomCreatePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
 
+  const getRoomTypeLabel = (val: string) => {
+    switch (val) {
+      case "bathroom": return "Bathroom";
+      case "bedroom": return "Bedroom";
+      case "kitchen": return "Kitchen";
+      case "living": return "Living Room";
+      case "dining": return "Dining Room";
+      case "hallway": return "Hallway";
+      case "staircase": return "Staircase";
+      case "custom": return "Other";
+      default: return "";
+    }
+  };
+
   const home = homes.find(h => h.id === homeId);
 
   const form = useForm<FormValues>({
@@ -53,8 +66,8 @@ export function RoomCreatePage() {
   if (!home) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <h2 className="text-2xl font-bold mb-2">Home not found</h2>
-        <Button onClick={() => navigate("/homes")}>Return to Homes</Button>
+        <h2 className="text-2xl font-medium mb-2">Property not found</h2>
+        <Button onClick={() => navigate("/properties")} className="rounded-full">Return to Properties</Button>
       </div>
     );
   }
@@ -69,11 +82,11 @@ export function RoomCreatePage() {
         coverImage: coverImagePreview || undefined,
       });
       
-      toast.success("Room added successfully");
-      navigate(`/homes/${home.id}`);
+      toast.success("Zone added successfully");
+      navigate(`/properties/${home.id}`);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to add room");
+      toast.error("Failed to add zone");
     } finally {
       setIsSubmitting(false);
     }
@@ -82,83 +95,75 @@ export function RoomCreatePage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setCoverImagePreview(URL.createObjectURL(file));
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCoverImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-500 pb-12">
-      <div className="flex items-center gap-4 mb-8">
-        <Button variant="ghost" size="icon" onClick={() => navigate(`/homes/${home.id}`)}>
-          <ArrowLeft className="h-5 w-5" />
+    <div className="max-w-3xl mx-auto space-y-10 pb-12">
+      <div className="flex items-center gap-4">
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate(`/properties/${home.id}`)}
+          className="text-neutral-500 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Add a Room</h1>
-          <p className="text-muted-foreground mt-1">To {home.name}</p>
-        </div>
+      </div>
+
+      <div>
+        <h1 className="text-4xl font-medium tracking-tight mb-2">Add a Zone</h1>
+        <p className="text-neutral-500 text-lg font-light">Configure a new monitoring zone for {home.name}</p>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <Card className="border-primary/10 shadow-sm">
-            <CardHeader>
-              <CardTitle>Room Details</CardTitle>
-              <CardDescription>Tell us about this specific space in your home.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Room Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Master Bathroom, Kitchen" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <div className="grid grid-cols-2 gap-4">
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-neutral-900 rounded-3xl p-8 md:p-10 border border-neutral-200 dark:border-neutral-800 shadow-sm space-y-8"
+          >
+             <div className="grid md:grid-cols-2 gap-8">
+               <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-neutral-500">Zone Name</FormLabel>
+                      <FormControl>
+                        <Input className="h-12 rounded-xl border-neutral-200 dark:border-neutral-800" placeholder="e.g. Master Bathroom" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
                 <FormField
                   control={form.control}
                   name="type"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Room Type *</FormLabel>
+                      <FormLabel className="text-neutral-500">Zone Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select type">
-                              {field.value === "bathroom" ? "Bathroom" :
-                               field.value === "bedroom" ? "Bedroom" :
-                               field.value === "kitchen" ? "Kitchen" :
-                               field.value === "living" ? "Living Room" :
-                               field.value === "dining" ? "Dining Room" :
-                               field.value === "hallway" ? "Hallway" :
-                               field.value === "laundry" ? "Laundry Room" :
-                               field.value === "garage" ? "Garage" :
-                               field.value === "basement" ? "Basement" :
-                               field.value === "entryway" ? "Entryway" :
-                               field.value === "office" ? "Office" :
-                               field.value === "staircase" ? "Staircase" :
-                               field.value === "custom" ? "Other" : null}
-                            </SelectValue>
+                          <SelectTrigger className="h-12 w-full rounded-xl border-neutral-200 dark:border-neutral-800">
+                            <span className="flex flex-1 text-left truncate">
+                              {getRoomTypeLabel(field.value) || "Select type"}
+                            </span>
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className="rounded-xl">
                           <SelectItem value="bathroom">Bathroom</SelectItem>
                           <SelectItem value="bedroom">Bedroom</SelectItem>
                           <SelectItem value="kitchen">Kitchen</SelectItem>
                           <SelectItem value="living">Living Room</SelectItem>
                           <SelectItem value="dining">Dining Room</SelectItem>
                           <SelectItem value="hallway">Hallway</SelectItem>
-                          <SelectItem value="laundry">Laundry Room</SelectItem>
-                          <SelectItem value="garage">Garage</SelectItem>
-                          <SelectItem value="basement">Basement</SelectItem>
-                          <SelectItem value="entryway">Entryway</SelectItem>
-                          <SelectItem value="office">Office</SelectItem>
                           <SelectItem value="staircase">Staircase</SelectItem>
                           <SelectItem value="custom">Other</SelectItem>
                         </SelectContent>
@@ -167,79 +172,73 @@ export function RoomCreatePage() {
                     </FormItem>
                   )}
                 />
+             </div>
 
-                <FormField
-                  control={form.control}
-                  name="floor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Floor Level *</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormDescription>Use 1 for main, 0 for basement</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+             <FormField
+                control={form.control}
+                name="floor"
+                render={({ field }) => (
+                  <FormItem className="md:w-1/2">
+                    <FormLabel className="text-neutral-500">Floor Level</FormLabel>
+                    <FormControl>
+                      <Input type="number" className="h-12 rounded-xl border-neutral-200 dark:border-neutral-800" {...field} />
+                    </FormControl>
+                    <FormDescription>0 for basement, 1 for main floor</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+             />
 
-              <div>
-                <label className="text-sm font-medium block mb-3">Cover Image (Optional)</label>
+             <div>
+                <label className="text-sm font-medium block mb-3 text-neutral-500">Reference Photo (Optional)</label>
                 {coverImagePreview ? (
-                  <div className="relative rounded-xl overflow-hidden border">
-                    <img src={coverImagePreview} alt="Preview" className="w-full h-48 object-cover" />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <Button type="button" variant="secondary" onClick={() => document.getElementById('cover-upload')?.click()}>
-                        Change Image
-                      </Button>
+                  <div className="relative rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-800 h-64 group cursor-pointer" onClick={() => document.getElementById('cover-upload')?.click()}>
+                    <img src={coverImagePreview} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                       <span className="text-white font-medium">Change Photo</span>
                     </div>
                   </div>
                 ) : (
                   <div 
-                    className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors hover:bg-muted/50 cursor-pointer"
+                    className="h-64 border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-2xl flex flex-col items-center justify-center text-center transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer"
                     onClick={() => document.getElementById('cover-upload')?.click()}
                   >
-                    <div className="bg-primary/5 p-3 rounded-full mb-3">
-                      <UploadCloud className="h-6 w-6 text-primary" />
+                    <div className="w-16 h-16 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center mb-4">
+                      <Camera className="h-6 w-6 text-neutral-400" />
                     </div>
-                    <p className="font-medium">Upload a cover photo</p>
-                    <p className="text-xs text-muted-foreground mt-1">Help visually identify this room</p>
+                    <p className="font-medium">Add a photo</p>
+                    <p className="text-sm text-neutral-500 mt-1 max-w-xs">Upload a clear photo to help identify this zone</p>
                   </div>
                 )}
                 <input 
-                  id="cover-upload" 
-                  type="file" 
-                  accept="image/*" 
-                  className="hidden" 
-                  onChange={handleImageUpload}
+                   id="cover-upload" 
+                   type="file" 
+                   accept="image/*" 
+                   className="hidden" 
+                   onChange={handleImageUpload}
                 />
               </div>
-              
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Notes (Optional)</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Any specific concerns about this room?" className="resize-none h-24" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-            <CardFooter className="flex justify-between border-t pt-6 bg-muted/20">
-              <Button type="button" variant="outline" onClick={() => navigate(`/homes/${home.id}`)} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Adding..." : "Add Room"}
-                {!isSubmitting && <Check className="ml-2 h-4 w-4" />}
-              </Button>
-            </CardFooter>
-          </Card>
+          </motion.div>
+
+          <div className="flex justify-end gap-4">
+            <Button 
+              type="button" 
+              variant="ghost" 
+              className="rounded-full h-12 px-6"
+              onClick={() => navigate(`/properties/${home.id}`)} 
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="rounded-full h-12 px-8 bg-black text-white shadow-lg transition-transform hover:scale-105"
+            >
+              {isSubmitting ? "Creating..." : "Create Zone"}
+            </Button>
+          </div>
+          
         </form>
       </Form>
     </div>

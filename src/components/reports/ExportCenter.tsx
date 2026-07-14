@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Printer, Share2, Mail, FileJson } from 'lucide-react';
+import { Download, Printer, Share2, Mail, FileJson, Info } from 'lucide-react';
 import { ScanResult } from '@/types/ai';
 import { toast } from 'sonner';
 
@@ -69,25 +69,34 @@ ${scan.recommendations.map(r => `- ${r}`).join('\n')}
   };
 
   return (
-    <Card className="border-border/60 shadow-sm bg-muted/10">
-      <CardContent className="p-6">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Export & Share</h3>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" className="flex-1 md:flex-none" onClick={handleDownloadPDF}>
-            <Download className="mr-2 h-4 w-4" /> Download PDF
-          </Button>
-          <Button variant="outline" className="flex-1 md:flex-none" onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" /> Print Report
-          </Button>
-          <Button variant="outline" className="flex-1 md:flex-none" onClick={handleEmailCaregiver}>
-            <Mail className="mr-2 h-4 w-4" /> Email Caregiver
-          </Button>
-          <Button variant="outline" className="flex-1 md:flex-none" onClick={handleCopyLink}>
-            <Share2 className="mr-2 h-4 w-4" /> Copy Link
-          </Button>
-          <Button variant="ghost" size="icon" title="Export JSON" className="md:ml-auto" onClick={handleDownloadJson}>
-            <FileJson className="h-4 w-4 text-muted-foreground" />
-          </Button>
+    <Card className="border-border/60 shadow-sm bg-muted/10 w-full h-full flex flex-col">
+      <CardContent className="p-5 flex flex-col h-full justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Export & Share</h3>
+          <div className="flex flex-wrap gap-2.5 items-center">
+            <Button variant="outline" size="sm" className="h-9" onClick={handleDownloadPDF}>
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Download PDF
+            </Button>
+            <Button variant="outline" size="sm" className="h-9" onClick={handlePrint}>
+              <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
+            </Button>
+            <Button variant="outline" size="sm" className="h-9" onClick={handleEmailCaregiver}>
+              <Mail className="mr-1.5 h-3.5 w-3.5" /> Email Caregiver
+            </Button>
+            <Button variant="outline" size="sm" className="h-9" onClick={handleCopyLink}>
+              <Share2 className="mr-1.5 h-3.5 w-3.5" /> Copy Link
+            </Button>
+            <Button variant="ghost" size="icon" title="Export JSON" className="h-9 w-9 md:ml-auto" onClick={handleDownloadJson}>
+              <FileJson className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="bg-neutral-500/10 border border-neutral-500/20 dark:border-neutral-800/50 rounded-lg p-3.5 text-xs text-muted-foreground flex gap-2">
+          <Info className="h-4 w-4 shrink-0 mt-0.5 text-neutral-400" />
+          <p className="leading-relaxed">
+            <strong className="text-foreground">Disclaimer:</strong> This AI-generated report is intended for informational purposes only and does not replace a professional in-home assessment by a certified occupational therapist or building inspector.
+          </p>
         </div>
       </CardContent>
     </Card>

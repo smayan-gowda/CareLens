@@ -7,1621 +7,1889 @@ import {
   query, 
   where, 
   onSnapshot, 
-  setDoc, 
+  addDoc, 
   deleteDoc, 
   doc 
 } from "firebase/firestore";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle, 
-  CardFooter 
-} from "@/components/ui/card";
+import { handleFirestoreError, OperationType, cleanUndefined } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   MapPin, 
   Phone, 
   Star, 
-  Compass, 
   Heart, 
   Search, 
-  Scale, 
-  Check, 
-  Layers, 
-  Paintbrush, 
-  Lightbulb, 
-  Wrench, 
-  Hammer, 
-  Zap, 
+  ExternalLink, 
   Sparkles, 
-  DollarSign, 
-  X, 
-  AlertTriangle,
-  ShoppingBag,
+  ShoppingBag, 
+  Globe, 
+  Eye, 
+  List, 
+  SlidersHorizontal, 
   Navigation,
-  Globe,
-  Plus
+  Check,
+  Building,
+  RefreshCw,
+  Clock,
+  Car
 } from "lucide-react";
-
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-// Modular Imports
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { 
-  CATEGORIES, 
-  CATEGORY_COLORS, 
-  CATEGORY_COLORS_HEX, 
-  SIMULATED_GEOLOCATIONS, 
-  MOCK_BUSINESS_TEMPLATES, 
-  calculateDistance, 
   generateLocalizedFallbackBusinesses, 
   hashSearchCoordinates,
-  getAreaCodeForCity
+  calculateDistance,
+  CATEGORY_COLORS
 } from "@/data/resourceTemplates";
+import L from "leaflet";
 
-import { SAMPLE_SCANS, SampleScan } from "@/data/sampleScans";
+// Recommended Home Safety Products Array
+const ALL_PRODUCTS = [
+  { 
+    id: 'p1', 
+    name: 'SureGrip Textured Grab Bar (24")', 
+    price: '$45.00', 
+    category: 'Hardware', 
+    rating: 4.9, 
+    description: 'ADA-compliant textured stainless steel safety bar with secure mount flanges.', 
+    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p2', 
+    name: 'Lumin Motion-Sensor LED Pathway Lights', 
+    price: '$29.99', 
+    category: 'Lighting', 
+    rating: 4.8, 
+    description: 'Stick-on wire-free motion sensor nightlights ideal for hallways, stairs, and bathrooms.', 
+    image: 'https://images.unsplash.com/photo-1565814636199-ae8133055c1c?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p3', 
+    name: 'Anti-Slip Comfort Grip Safety Mat', 
+    price: '$34.50', 
+    category: 'Flooring', 
+    rating: 4.7, 
+    description: 'Textured rubber-backed comfort mat with anti-trip beveled edges.', 
+    image: 'https://images.unsplash.com/photo-1584622781564-1d987f7333c1?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p4', 
+    name: 'Raised Toilet Seat with Padded Arms', 
+    price: '$59.99', 
+    category: 'Plumbing', 
+    rating: 4.6, 
+    description: 'Heavy-duty safety frame adding 5" toilet height to reduce standing strain.', 
+    image: 'https://images.unsplash.com/photo-1564540574859-0dfb63985953?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p5', 
+    name: 'ClearTread Tub Safety Grips (24-pack)', 
+    price: '$12.99', 
+    category: 'Hardware', 
+    rating: 4.9, 
+    description: 'Waterproof self-adhesive transparent safety strips for tubs, showers, and tiles.', 
+    image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p6', 
+    name: 'Bed Assist Leverage Hand Rail', 
+    price: '$42.00', 
+    category: 'Furniture', 
+    rating: 4.7, 
+    description: 'Sliding under-mattress support bar for easy bed entries, exits, and transfers.', 
+    image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p7', 
+    name: 'Modular Lightweight Entry Ramp', 
+    price: '$125.00', 
+    category: 'Accessibility', 
+    rating: 4.9, 
+    description: 'Durable aluminum ramp with slip-resistant traction surface for thresholds up to 3".', 
+    image: 'https://images.unsplash.com/photo-1516937941344-00b4e0337589?auto=format&fit=crop&q=80&w=400' 
+  },
+  { 
+    id: 'p8', 
+    name: 'Heavy Duty Shower Transfer Bench', 
+    price: '$79.00', 
+    category: 'Medical Equipment', 
+    rating: 4.8, 
+    description: 'Sturdy seating bench with drainage holes and non-slip rubber suction-cup legs.', 
+    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=400' 
+  }
+];
+
+// Quick Select US Cities Coordinates
+const QUICK_CITIES = [
+  { name: "Frisco, TX", lat: 33.1507, lng: -96.8236 },
+  { name: "Austin, TX", lat: 30.2672, lng: -97.7431 },
+  { name: "Plano, TX", lat: 33.0198, lng: -96.6989 },
+  { name: "Dallas, TX", lat: 32.7767, lng: -96.7970 },
+  { name: "Seattle, WA", lat: 47.6062, lng: -122.3321 },
+  { name: "New York, NY", lat: 40.7128, lng: -74.0060 }
+];
+
+// 14 Categories as explicitly requested
+const AVAILABLE_CATEGORIES = [
+  "All",
+  "ADA",
+  "Plumbing",
+  "Electrical",
+  "HVAC",
+  "Flooring",
+  "Roofing",
+  "Cabinets",
+  "Kitchen",
+  "Bathroom",
+  "Hardware",
+  "Medical Equipment",
+  "Accessibility",
+  "Painting",
+  "Handyman"
+];
+
+// Map User UI Category choices to specific Yelp API queries (Categories & Terms)
+const getYelpParamsForCategory = (categoryName: string) => {
+  switch (categoryName) {
+    case "ADA":
+      return { categories: "homeaccessibility,contractors", term: "ADA home safety modifications handicap senior accessibility" };
+    case "Plumbing":
+      return { categories: "plumbing", term: "grab bars safety walk in tub plumbers toilet replacement" };
+    case "Electrical":
+      return { categories: "electricians", term: "outlet height smart switches motion sensors electrician lighting safety" };
+    case "HVAC":
+      return { categories: "hvac", term: "smart thermostat heating cooling clean air filters HVAC" };
+    case "Flooring":
+      return { categories: "flooring", term: "non slip flooring slip resistant vinyl tiles carpets flooring contractors" };
+    case "Roofing":
+      return { categories: "roofing", term: "roof repair safety inspectors storm damage" };
+    case "Cabinets":
+      return { categories: "cabinetry", term: "pull down shelves accessible cabinets kitchen remodeling cabinetry" };
+    case "Kitchen":
+      return { categories: "kitchenremodeling", term: "kitchen safety accessible countertops roll under sink remodeling" };
+    case "Bathroom":
+      return { categories: "bathroomremodeling", term: "bathroom safety walk in shower grab bar installers bathroom remodel" };
+    case "Hardware":
+      return { categories: "hardware", term: "grab bars safety rails bathroom hardware" };
+    case "Medical Equipment":
+      return { categories: "medicalsupplies", term: "wheelchairs hospital bed walk aid medical equipment suppliers" };
+    case "Accessibility":
+      return { categories: "homeaccessibility", term: "accessibility remodeling wheelchair ramp installers" };
+    case "Painting":
+      return { categories: "painters", term: "non toxic low VOC paint contractors slip resistant floor coatings" };
+    case "Handyman":
+      return { categories: "handyman", term: "grab bars installation home safety repair minor modifications handyman" };
+    default:
+      return { categories: "homeaccessibility,contractors,handyman", term: "senior safety home accessibility" };
+  }
+};
+
+// Generates appropriate Specialties list based on Category name
+const getSpecialtiesForCategory = (categoryName: string, yelpTitles: string[]): string[] => {
+  const baseSpecialties = yelpTitles.slice(0, 2);
+  switch (categoryName) {
+    case "ADA":
+    case "Accessibility":
+      return ["ADA Bathrooms", "Wheelchair Ramps", "Senior Living Safety", ...baseSpecialties];
+    case "Lighting":
+      return ["Motion Sensor Pathways", "Anti-Glare LED Fixtures", "Fall-Prevention Lighting", ...baseSpecialties];
+    case "Hardware":
+      return ["Textured Grab Bars", "Safety Rails", "Threshold Transitions", ...baseSpecialties];
+    case "Plumbing":
+      return ["Walk-In Tubs", "Raised Toilets", "Anti-Scald Valves", ...baseSpecialties];
+    case "Electrical":
+      return ["Lowered Light Switches", "Backup Generator Outlets", "Smart Home Voice Controls", ...baseSpecialties];
+    case "Flooring":
+      return ["Slip-Resistant Textures", "Low-Pile Non-Trip Carpets", "Comfort Rubber Mats", ...baseSpecialties];
+    case "Handyman":
+      return ["Grab Bar Installations", "Safety Gate Mounting", "Furniture Anchoring", ...baseSpecialties];
+    default:
+      return ["ADA & Universal Safety Compliance", ...baseSpecialties];
+  }
+};
+
+// Smart Match Score Logic (0 to 100) comparing Provider Specialties/Categories with Latest Scan recommendations
+const calculateMatchScore = (provider: any, latestScan: any): number => {
+  let score = 72; // Baseline
+  
+  // Rating-driven boost
+  score += Math.round((provider.rating || 4.0) * 4.5); // Up to +22 points
+
+  if (!latestScan || !latestScan.recommendations) {
+    return Math.min(99, score);
+  }
+
+  const searchableString = [
+    ...(provider.categories || []),
+    ...(provider.specialties || []),
+    provider.name
+  ].join(" ").toLowerCase();
+
+  let matchesCount = 0;
+  latestScan.recommendations.forEach((rec: any) => {
+    const recTitle = rec.title.toLowerCase();
+    
+    // Simple conceptual tags matching
+    if (searchableString.includes("plumb") && (recTitle.includes("plumb") || recTitle.includes("leak") || recTitle.includes("shower") || recTitle.includes("tub") || recTitle.includes("toilet") || recTitle.includes("grab bar"))) {
+      matchesCount++;
+    }
+    if (searchableString.includes("floor") && (recTitle.includes("floor") || recTitle.includes("slip") || recTitle.includes("trip") || recTitle.includes("mat") || recTitle.includes("carpet") || recTitle.includes("rug"))) {
+      matchesCount++;
+    }
+    if (searchableString.includes("light") && (recTitle.includes("light") || recTitle.includes("dark") || recTitle.includes("bulb") || recTitle.includes("glare") || recTitle.includes("illumination") || recTitle.includes("sensor"))) {
+      matchesCount++;
+    }
+    if (searchableString.includes("accessibility") || searchableString.includes("ada") || searchableString.includes("handyman")) {
+      if (recTitle.includes("ramp") || recTitle.includes("rail") || recTitle.includes("grab bar") || recTitle.includes("support") || recTitle.includes("remodel") || recTitle.includes("barrier")) {
+        matchesCount++;
+      }
+    }
+  });
+
+  if (matchesCount > 0) {
+    score += Math.min(20, matchesCount * 10);
+  }
+
+  // Cap matching between 65% and 99%
+  return Math.min(99, Math.max(65, score));
+};
 
 export function ResourcesPage() {
   const { user } = useAuthStore();
   const { scans } = useScanStore();
 
-  // Navigation states
-  const [activeTab, setActiveTab] = useState<"search" | "saved" | "shopping">("search");
-  const [activeCategory, setActiveCategory] = useState("All");
+  // Track which recommendation is currently being classified by AI
+  const [classifyingRecId, setClassifyingRecId] = useState<string | number | null>(null);
+
+  // Navigation & Listing States
+  const [activeTab, setActiveTab] = useState<'local' | 'products' | 'saved'>('local');
   const [searchQuery, setSearchQuery] = useState("");
-  const [locationSearch, setLocationSearch] = useState("Austin, TX");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+
+  // Location & Geocoding Coordinates
+  const [locationQuery, setLocationQuery] = useState("Austin, TX");
   const [activeCityName, setActiveCityName] = useState("Austin, TX");
-  const [mapCenter, setMapCenter] = useState({ lat: 30.2672, lng: -97.7431 });
-  const [mapZoom, setMapZoom] = useState(13);
+  const [coords, setCoords] = useState({ lat: 30.2672, lng: -97.7431 });
 
-  // Active room report linking for AI Match
-  const [selectedScanId, setSelectedScanId] = useState<string>("sample_bathroom");
+  // Filter Configurations (Advanced Filters)
+  const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
+  const [searchRadius, setSearchRadius] = useState<number>(15); // miles
+  const [minRating, setMinRating] = useState<number>(0);
+  const [priceLevel, setPriceLevel] = useState<number | null>(null);
+  const [openNow, setOpenNow] = useState(false);
+  const [ecoFriendlyOnly, setEcoFriendlyOnly] = useState(false);
+  const [fastestAvailabilityOnly, setFastestAvailabilityOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<'match' | 'rating' | 'distance' | 'popularity'>('match');
 
-  // Free Live Overpass data states
-  const [overpassBusinesses, setOverpassBusinesses] = useState<any[]>([]);
-  const [isOverpassLoading, setIsOverpassLoading] = useState(false);
-  const [roadDistances, setRoadDistances] = useState<Record<string, number>>({});
+  // Mobile split toggle (Zillow/Airbnb style list vs map on small screens)
+  const [mobileViewMode, setMobileViewMode] = useState<'list' | 'map'>('list');
 
-  // Saved resources (favorites)
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [savedResources, setSavedResources] = useState<any[]>([]);
+  // Business Results State
+  const [liveProviders, setLiveProviders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [savedItems, setSavedItems] = useState<any[]>([]);
 
-  // Filter conditions states
-  const [distanceFilter, setDistanceFilter] = useState<number>(25); // Max radius in miles
-  const [ratingFilter, setRatingFilter] = useState<number>(0);
-  const [matchScoreFilter, setMatchScoreFilter] = useState<number>(0); // 0, 80, 90, 95
-  const [openNowFilter, setOpenNowFilter] = useState<boolean>(false);
-  const [budgetFilter, setBudgetFilter] = useState<number[]>([]); // 1,2,3,4
-  const [luxuryFilter, setLuxuryFilter] = useState<boolean>(false);
-  const [ecoFriendlyFilter, setEcoFriendlyFilter] = useState<boolean>(false);
-  const [fastestFilter, setFastestFilter] = useState<boolean>(false);
-  const [popularityFilter, setPopularityFilter] = useState<boolean>(false); // 150+ reviews
-  const [highestRatedFilter, setHighestRatedFilter] = useState<boolean>(false); // 4.7+ rating
-
-  // Checked/Completed items on Shopping guide
-  const [checkedItems, setCheckedItems] = useState<string[]>([]);
-
-  // Selected state on map/listings
-  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
-  const [comparedBusinessIds, setComparedBusinessIds] = useState<string[]>([]);
-  const [showComparison, setShowComparison] = useState(false);
-
-  // Leaflet references
-  const mapRef = useRef<HTMLDivElement>(null);
+  // Leaflet Interactive Map References
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersLayerRef = useRef<L.LayerGroup | null>(null);
-  const userMarkerRef = useRef<L.Marker | null>(null);
+  const markersGroupRef = useRef<L.FeatureGroup | null>(null);
 
-  // Retrieve user room scans
-  const allCompletedScans = useMemo(() => {
-    const userScansList = Object.values(scans).flat().filter(s => s.status === "Completed");
-    return [...userScansList] as any[];
+  // Find the user's latest completed scan to provide contextually-accurate recommendations
+  const latestScan = useMemo(() => {
+    const allScans = Object.values(scans).flat();
+    if (allScans.length === 0) return null;
+    return [...allScans].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0];
   }, [scans]);
 
-  // Combine real user scans with sample scans
-  const scanOptions = useMemo(() => {
-    const options: Array<{ id: string; label: string; isSample: boolean; scanData: any }> = [];
-    
-    // Add real scans
-    allCompletedScans.forEach((scan, idx) => {
-      const roomLabel = scan.roomType ? `${scan.roomType.charAt(0).toUpperCase()}${scan.roomType.slice(1)}` : `Room #${idx + 1}`;
-      const dateStr = new Date(scan.createdAt).toLocaleDateString();
-      options.push({
-        id: scan.id,
-        label: `${roomLabel} Scan (${dateStr})`,
-        isSample: false,
-        scanData: scan
-      });
-    });
-
-    // Add high-fidelity templates
-    SAMPLE_SCANS.forEach(sample => {
-      options.push({
-        id: sample.id,
-        label: `Sample ${sample.roomType.charAt(0).toUpperCase()}${sample.roomType.slice(1)} Report (Preloaded)`,
-        isSample: true,
-        scanData: sample
-      });
-    });
-
-    return options;
-  }, [allCompletedScans]);
-
-  // Currently selected scan details
-  const activeScan = useMemo(() => {
-    const selected = scanOptions.find(o => o.id === selectedScanId);
-    return selected ? selected.scanData : SAMPLE_SCANS[0];
-  }, [selectedScanId, scanOptions]);
-
-  // Sync Saved Resources from Firestore
+  // Load saved items persistently from Firestore for signed-in users
   useEffect(() => {
     if (!user) {
-      setSavedIds([]);
-      setSavedResources([]);
+      setSavedItems([]);
       return;
     }
 
-    const q = query(collection(db, "savedResources"), where("userId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ids: string[] = [];
-      const resources: any[] = [];
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        ids.push(data.businessId);
-        resources.push({
-          id: doc.id,
-          ...data
-        });
-      });
-      setSavedIds(ids);
-      setSavedResources(resources);
-    }, (err) => {
-      console.error("Firestore sync error:", err);
-    });
+    const q = query(
+      collection(db, "savedResources"),
+      where("userId", "==", user.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const items = snapshot.docs.map((doc) => ({
+          firestoreId: doc.id,
+          ...doc.data(),
+        }));
+        setSavedItems(items);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, "savedResources");
+      }
+    );
 
     return () => unsubscribe();
   }, [user]);
 
-  // Yelp Business Search API with fallback
-  const fetchYelpBusinesses = async (lat: number, lng: number, searchName: string, category: string = "All") => {
-    setIsOverpassLoading(true);
-    const cleanCityName = searchName.split(",")[0].trim();
-    const areaCode = getAreaCodeForCity(cleanCityName);
-
+  // Call OSRM to get precise road driving distances and duration in minutes
+  const getDrivingRoutes = async (origin: { lat: number; lng: number }, destinations: { lat: number; lng: number }[]) => {
+    if (destinations.length === 0) return [];
     try {
-      // Map UI categories to Yelp Aliases and Search Terms
-      const categoryMap: Record<string, { term: string; categories: string }> = {
-        "All": { 
-          term: "home safety accessibility modification senior care", 
-          categories: "homeaccessibility,handyman,contractors,hardware" 
-        },
-        "Contractors": { term: "remodeling safety accessibility", categories: "contractors,homeaccessibility" },
-        "Interior Designers": { term: "universal design accessibility", categories: "interiordesign" },
-        "Furniture": { term: "senior furniture ergonomic", categories: "furniture" },
-        "Paint": { term: "painting high contrast", categories: "paintstores" },
-        "Flooring": { term: "non-slip flooring carpet", categories: "flooring" },
-        "Lighting": { term: "lighting safety motion sensor", categories: "lightingstores" },
-        "Hardware": { term: "safety hardware grab bars", categories: "hardware" },
-        "Appliances": { term: "safe appliances accessible", categories: "appliances" },
-        "Plumbing": { term: "bath safety shower conversion", categories: "plumbing" },
-        "Electrical": { term: "lighting wiring safety", categories: "electricians" },
-        "Cleaning": { term: "house cleaning seniors", categories: "houselife" },
-        "Landscaping": { term: "accessible landscaping ramps", categories: "landscaping" },
-        "HVAC": { term: "air quality climate control", categories: "hvac" },
-        "Roofing": { term: "roof repair", categories: "roofing" },
-        "Windows": { term: "safe windows easy opening", categories: "windowsinstallation" }
-      };
-
-      const searchConfig = categoryMap[category] || categoryMap["All"];
-      const term = searchConfig.term;
-      const categories = searchConfig.categories;
-      const radiusInMiles = distanceFilter || 25;
+      const coordsString = `${origin.lng},${origin.lat};` + 
+        destinations.map(d => `${d.lng},${d.lat}`).join(";");
       
-      const response = await fetch(`/api/yelp-search?latitude=${lat}&longitude=${lng}&term=${encodeURIComponent(term)}&categories=${encodeURIComponent(categories)}&radius=${radiusInMiles}`);
-      
-      if (!response.ok) {
-        throw new Error(`Yelp API proxy responded with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data.businesses || data.businesses.length === 0) {
-        setOverpassBusinesses([]);
-        return;
-      }
-
-      const fetched = data.businesses.map((item: any) => {
-        const bizLat = item.coordinates?.latitude || lat;
-        const bizLng = item.coordinates?.longitude || lng;
-        
-        // Map Yelp categories to our system category list (Hardware, Flooring, Paint, Contractors, Plumbing, Lighting, Furniture)
-        const yelpCategories = item.categories || [];
-        const categories: string[] = [];
-        const specialties: string[] = [];
-
-        const hasCat = (keyword: string) => 
-          yelpCategories.some((c: any) => c.title.toLowerCase().includes(keyword) || c.alias.toLowerCase().includes(keyword)) || 
-          item.name.toLowerCase().includes(keyword);
-
-        if (hasCat("hardware") || hasCat("diy") || hasCat("improvement") || hasCat("tools")) {
-          categories.push("Hardware");
-          specialties.push("ADA Safety Grab Bars", "Non-Slip Adhesive Strips", "Lever Door Handles");
-        }
-        if (hasCat("paint")) {
-          categories.push("Paint", "Hardware");
-          specialties.push("High-Contrast Wall Paint", "Non-Glare Coatings");
-        }
-        if (hasCat("furniture") || hasCat("home decor") || hasCat("appliance")) {
-          categories.push("Furniture");
-          specialties.push("Heavy-Base Stable Seating", "Ergonomic Layout Aids");
-        }
-        if (hasCat("floor") || hasCat("carpet") || hasCat("tile")) {
-          categories.push("Flooring");
-          specialties.push("ADA Textured Hardwood", "Slip-Resistant Tiles");
-        }
-        if (hasCat("contractor") || hasCat("construction") || hasCat("handyman") || hasCat("builder") || hasCat("remodel") || hasCat("service")) {
-          categories.push("Contractors");
-          specialties.push("Accessible Entry Ramp Construction", "Doorway Expansion");
-        }
-        if (hasCat("plumb") || hasCat("bath") || hasCat("shower") || hasCat("pipe") || hasCat("water")) {
-          if (!categories.includes("Contractors")) categories.push("Contractors");
-          categories.push("Plumbing");
-          specialties.push("Roll-In Wetroom Conversion", "Thermostatic Antiscald Valves");
-        }
-        if (hasCat("electric") || hasCat("light") || hasCat("wiring") || hasCat("power")) {
-          if (!categories.includes("Contractors")) categories.push("Contractors");
-          categories.push("Lighting");
-          specialties.push("Sensor Nightlight Outlets", "Emergency Pathway LEDs");
-        }
-
-        if (categories.length === 0) {
-          categories.push("Hardware");
-          specialties.push("Accessible Living Hardware Supplies", "Safety Fixtures");
-        }
-
-        const distance = calculateDistance(lat, lng, bizLat, bizLng);
-        
-        const addressParts = [];
-        if (item.location?.address1) addressParts.push(item.location.address1);
-        if (item.location?.city) addressParts.push(item.location.city);
-        if (item.location?.state) addressParts.push(item.location.state);
-        const address = addressParts.length > 0 ? addressParts.join(", ") : `Near ${cleanCityName}`;
-
-        const priceStr = item.price || "$$";
-        const priceLevel = priceStr.length;
-
-        // Ensure unique index fallback checks
-        const hashId = item.id ? item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1) : 42;
-
-        return {
-          id: item.id || `yelp_${Math.random()}`,
-          name: item.name,
-          categories,
-          rating: item.rating || 4.0,
-          reviewsCount: item.review_count || 10,
-          priceLevel,
-          phone: item.phone || item.display_phone || `(${areaCode}) 555-0800`,
-          website: item.url || "https://www.yelp.com",
-          lat: bizLat,
-          lng: bizLng,
-          distance,
-          address,
-          specialties,
-          ecoFriendly: hashId % 2 === 0,
-          luxury: priceLevel >= 3,
-          fastestAvailability: hashId % 3 === 0,
-          openHours: item.is_closed === false ? "8:00 AM - 6:00 PM" : "Closed",
-          isOverpass: false,
-          isYelp: true,
-          imageUrl: item.image_url
-        };
-      });
-
-      const uniqueFetched = fetched.filter(
-        (val: any, index: number, self: any[]) =>
-          self.findIndex((t) => t.id === val.id) === index
+      const response = await fetch(
+        `https://router.project-osrm.org/table/v1/driving/${coordsString}?sources=0&annotations=distance,duration`,
+        { signal: AbortSignal.timeout(4000) } // 4 seconds timeout guard
       );
-
-      setOverpassBusinesses(uniqueFetched);
-      toast.success(`Discovered ${uniqueFetched.length} live local businesses with genuine Yelp reviews!`);
-    } catch (err: any) {
-      console.warn("Yelp API failed. Using high-fidelity fallback generator.", err);
-      const fallbackListings = generateLocalizedFallbackBusinesses(lat, lng, cleanCityName);
-      setOverpassBusinesses(fallbackListings);
-    } finally {
-      setIsOverpassLoading(false);
+      if (!response.ok) throw new Error("OSRM table request failed");
+      
+      const data = await response.json();
+      if (data.code === "Ok" && data.distances && data.distances[0]) {
+        return destinations.map((_, idx) => {
+          const meters = data.distances[0][idx + 1];
+          const seconds = data.durations?.[0]?.[idx + 1];
+          
+          const miles = meters !== undefined && meters !== null ? meters / 1609.344 : null;
+          const minutes = seconds !== undefined && seconds !== null ? Math.round(seconds / 60) : null;
+          
+          return { miles, minutes };
+        });
+      }
+    } catch (error) {
+      console.warn("OSRM table routing failed, using mathematical fallbacks:", error);
     }
+    return null;
   };
 
-  // Trigger Yelp live load on search center, active city, or distance filter changes
+  // Synchronize Yelp and OSRM data based on category, coordinates, radius and filters
   useEffect(() => {
-    fetchYelpBusinesses(mapCenter.lat, mapCenter.lng, activeCityName, activeCategory);
-  }, [mapCenter.lat, mapCenter.lng, activeCityName, distanceFilter, activeCategory]);
-
-  // Fetch precise road driving distances from OSRM Table API
-  useEffect(() => {
-    if (overpassBusinesses.length === 0) {
-      setRoadDistances({});
-      return;
-    }
-
-    const fetchOSRMDistances = async () => {
+    let isMounted = true;
+    
+    const loadData = async () => {
+      setIsLoading(true);
       try {
-        const source = `${mapCenter.lng},${mapCenter.lat}`;
-        const destinations = overpassBusinesses.map(b => `${b.lng},${b.lat}`).join(';');
+        const params = getYelpParamsForCategory(selectedCategory);
         
-        // OSRM Table API: sources=0 means only calculate distance from the first coordinate (user) to all others
-        const url = `https://router.project-osrm.org/table/v1/driving/${source};${destinations}?sources=0&annotations=distance`;
+        const response = await fetch(
+          `/api/yelp-search?latitude=${coords.lat}&longitude=${coords.lng}&categories=${params.categories}&term=${encodeURIComponent(params.term)}&radius=${searchRadius}`
+        );
         
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("OSRM API responded with error");
+        if (!response.ok) {
+          throw new Error("Yelp API proxy returned non-OK status");
+        }
         
         const data = await response.json();
+        if (!isMounted) return;
         
-        if (data.code === "Ok" && data.distances && data.distances[0]) {
-          const newDistances: Record<string, number> = {};
-          // data.distances[0] contains [0, distToBiz1, distToBiz2, ...]
-          // We slice from 1 to skip the 0 value (source to source distance)
-          data.distances[0].slice(1).forEach((distMeters: number | null, idx: number) => {
-            const biz = overpassBusinesses[idx];
-            if (biz && distMeters !== null) {
-              // Convert meters to miles
-              newDistances[biz.id] = distMeters * 0.000621371;
+        if (data.businesses && data.businesses.length > 0) {
+          const businesses = data.businesses;
+          
+          // Fetch real drive times and distances
+          const destCoords = businesses.map((b: any) => ({
+            lat: b.coordinates.latitude,
+            lng: b.coordinates.longitude
+          }));
+          
+          const routingData = await getDrivingRoutes(coords, destCoords);
+          if (!isMounted) return;
+          
+          const mapped = businesses.map((b: any, idx: number) => {
+            let dist = b.distance / 1609.344;
+            let durationMin = null;
+            
+            if (routingData && routingData[idx]) {
+              if (routingData[idx].miles !== null) dist = routingData[idx].miles;
+              if (routingData[idx].minutes !== null) durationMin = routingData[idx].minutes;
             }
+            
+            const specialties = getSpecialtiesForCategory(
+              selectedCategory, 
+              b.categories.map((c: any) => c.title)
+            );
+            
+            return {
+              id: `yelp_${b.id}`,
+              name: b.name,
+              categories: b.categories.map((c: any) => c.title),
+              rating: b.rating,
+              reviewsCount: b.review_count,
+              phone: b.display_phone || b.phone || "No phone listed",
+              website: b.url,
+              address: b.location.display_address?.join(", ") || b.location.address1 || "Local address",
+              lat: b.coordinates.latitude,
+              lng: b.coordinates.longitude,
+              distance: dist,
+              durationMinutes: durationMin,
+              specialties,
+              isYelp: true,
+              priceLevel: b.price ? b.price.length : null,
+              openHours: b.is_closed ? "Closed" : "Open Now",
+              ecoFriendly: Math.random() > 0.5, // simulate green practices
+              fastestAvailability: Math.random() > 0.4, // simulate response rates
+              image: b.image_url
+            };
           });
-          setRoadDistances(newDistances);
+          
+          setLiveProviders(mapped);
+        } else {
+          // Fall back to simulated local templates
+          const fallbacks = generateLocalizedFallbackBusinesses(coords.lat, coords.lng, activeCityName);
+          const destCoords = fallbacks.map((f: any) => ({ lat: f.lat, lng: f.lng }));
+          const routingData = await getDrivingRoutes(coords, destCoords);
+          if (!isMounted) return;
+          
+          const mapped = fallbacks.map((f: any, idx: number) => {
+            let dist = f.distance;
+            let durationMin = null;
+            if (routingData && routingData[idx]) {
+              if (routingData[idx].miles !== null) dist = routingData[idx].miles;
+              if (routingData[idx].minutes !== null) durationMin = routingData[idx].minutes;
+            }
+            return {
+              ...f,
+              distance: dist,
+              durationMinutes: durationMin,
+              isYelp: false
+            };
+          });
+          
+          setLiveProviders(mapped);
         }
       } catch (err) {
-        console.warn("OSRM road distance calculation failed, using straight-line estimates.", err);
+        console.error("Error loading resources:", err);
+        // Fall back to robust simulated business list to ensure app never crashes
+        if (isMounted) {
+          const fallbacks = generateLocalizedFallbackBusinesses(coords.lat, coords.lng, activeCityName).map(f => ({
+            ...f,
+            isYelp: false
+          }));
+          setLiveProviders(fallbacks);
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
-
-    fetchOSRMDistances();
-  }, [overpassBusinesses, mapCenter.lat, mapCenter.lng]);
-
-  // Dynamic Match Score calculations connecting the selected room scan to each business
-  const processedBusinesses = useMemo(() => {
-    const cleanCityName = activeCityName.split(",")[0].trim();
-    const rawList = overpassBusinesses.length > 0 
-      ? overpassBusinesses 
-      : generateLocalizedFallbackBusinesses(mapCenter.lat, mapCenter.lng, cleanCityName);
-
-    return rawList.map(biz => {
-      // Base match score
-      let score = 75;
-      let explanation = "General home modification supplier with standard certification.";
-
-      const bizCats = biz.categories || [];
-      const bizSpecs = (biz.specialties || []).map((s: string) => s.toLowerCase());
-
-      if (activeScan) {
-        const roomType = (activeScan.roomType || "general").toLowerCase();
-        const hazards = activeScan.hazards || [];
-
-        let matchesCount = 0;
-        const reasons: string[] = [];
-
-        // Category matching rules
-        if (roomType === "bathroom") {
-          if (bizCats.includes("Plumbing") || biz.name.toLowerCase().includes("bath")) {
-            score += 15;
-            reasons.push("bathroom modifications expertise");
-          }
-          if (bizCats.includes("Flooring") && hazards.some((h: any) => h.title.toLowerCase().includes("floor") || h.title.toLowerCase().includes("slip"))) {
-            score += 10;
-            reasons.push("slip-resistant floor installation solutions");
-          }
-        } else if (roomType === "kitchen") {
-          if (bizCats.includes("Cabinets") || bizCats.includes("Countertops")) {
-            score += 15;
-            reasons.push("pull-down cabinetry and accessible handles");
-          }
-        } else if (roomType === "living room" || roomType === "bedroom") {
-          if (bizCats.includes("Furniture")) {
-            score += 15;
-            reasons.push("stable, high-seat heavy ergonomic furniture");
-          }
-        }
-
-        // Specific hazard text matches
-        hazards.forEach((haz: any) => {
-          const hazTitle = haz.title.toLowerCase();
-          const hazDesc = haz.description.toLowerCase();
-
-          if ((hazTitle.includes("light") || hazDesc.includes("light")) && bizCats.includes("Lighting")) {
-            score += 8;
-            reasons.push("motion-activated LED pathway wiring");
-          }
-          if ((hazTitle.includes("grab") || hazTitle.includes("rail") || hazDesc.includes("rail")) && (bizCats.includes("Hardware") || bizCats.includes("Plumbing"))) {
-            score += 8;
-            reasons.push("sturdy ADA comfort grab rails");
-          }
-          if ((hazTitle.includes("slip") || hazTitle.includes("trip") || hazDesc.includes("rug")) && bizCats.includes("Flooring")) {
-            score += 6;
-            reasons.push("anti-slip flooring texturizers");
-          }
-        });
-
-        if (reasons.length > 0) {
-          score = Math.min(99, score);
-          explanation = `Excellent compatibility score due to their specialized support for ${reasons.slice(0, 2).join(" and ")}.`;
-        } else {
-          score = 80 + (biz.rating ? Math.floor((biz.rating - 4.0) * 10) : 5);
-          explanation = "Good general rating for custom safety enhancements and home accessories.";
-        }
-      }
-
-      return {
-        ...biz,
-        aiScore: score,
-        aiExplanation: explanation
-      };
-    });
-  }, [overpassBusinesses, mapCenter, locationSearch, activeScan]);
-
-  // Apply Search, Categories, and Filters
-  const filteredBusinesses = useMemo(() => {
-    return processedBusinesses
-      .filter((biz) => {
-        // Category filter
-        if (activeCategory !== "All") {
-          if (!biz.categories.includes(activeCategory)) return false;
-        }
-
-        // Text query
-        if (searchQuery.trim() !== "") {
-          const norm = searchQuery.toLowerCase();
-          const matchesName = biz.name.toLowerCase().includes(norm);
-          const matchesSpecs = biz.specialties.some(s => s.toLowerCase().includes(norm));
-          if (!matchesName && !matchesSpecs) return false;
-        }
-
-        // Side Filters
-        if (biz.distance > distanceFilter) return false;
-        if (ratingFilter > 0 && biz.rating < ratingFilter) return false;
-        if (matchScoreFilter > 0 && biz.aiScore < matchScoreFilter) return false;
-        if (openNowFilter && biz.openHours === "Closed") return false;
-        if (budgetFilter.length > 0 && !budgetFilter.includes(biz.priceLevel)) return false;
-        if (luxuryFilter && !biz.luxury) return false;
-        if (ecoFriendlyFilter && !biz.ecoFriendly) return false;
-        if (fastestFilter && !biz.fastestAvailability) return false;
-        if (popularityFilter && biz.reviewsCount < 150) return false;
-        if (highestRatedFilter && biz.rating < 4.7) return false;
-
-        return true;
-      })
-      .sort((a, b) => b.aiScore - a.aiScore); // Prioritize highest match scores
-  }, [processedBusinesses, activeCategory, searchQuery, distanceFilter, ratingFilter, matchScoreFilter, openNowFilter, budgetFilter, luxuryFilter, ecoFriendlyFilter, fastestFilter, popularityFilter, highestRatedFilter]);
-
-  // Generate checklist Shopping Guide directly linked to the Recommendations inside the Selected Room Scan
-  const shoppingList = useMemo(() => {
-    const list: Array<{ id: string; name: string; category: string; description: string; roomSource: string; stores: string[] }> = [];
     
-    if (activeScan) {
-      const roomLabel = activeScan.roomType ? `${activeScan.roomType.charAt(0).toUpperCase()}${activeScan.roomType.slice(1)}` : "Room";
-      
-      const recommendations = activeScan.recommendations || [];
-      recommendations.forEach((rec: any, idx: number) => {
-        const title = rec.title;
-        const text = (rec.title + " " + rec.description).toLowerCase();
-        
-        let category = "Hardware";
-        let storeOptions = ["The Home Depot", "Lowe's Home Improvement"];
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [coords, selectedCategory, searchRadius]);
 
-        if (text.includes("paint") || text.includes("coat")) {
-          category = "Paint";
-          storeOptions = ["Sherwin-Williams Commercial", "The Home Depot"];
-        } else if (text.includes("floor") || text.includes("tile") || text.includes("rug") || text.includes("mat")) {
-          category = "Flooring";
-          storeOptions = ["Floor & Decor", "The Home Depot", "Lowe's Home Improvement"];
-        } else if (text.includes("light") || text.includes("bulb") || text.includes("outlet") || text.includes("electrical")) {
-          category = "Lighting";
-          storeOptions = ["VoltGuard Electrical", "The Home Depot", "Lowe's Home Improvement"];
-        } else if (text.includes("cabinet") || text.includes("drawer") || text.includes("handle")) {
-          category = "Cabinets";
-          storeOptions = ["IKEA Smart & Adaptive Living", "The Home Depot"];
-        } else if (text.includes("grab") || text.includes("bar") || text.includes("rail") || text.includes("shower") || text.includes("valve") || text.includes("toilet")) {
-          category = "Plumbing";
-          storeOptions = ["Cascade Plumbing & Bathroom Safety", "The Home Depot", "Lowe's Home Improvement"];
-        } else if (text.includes("furniture") || text.includes("chair") || text.includes("sofa")) {
-          category = "Furniture";
-          storeOptions = ["Urban Dwelling Ergonomic Furniture", "IKEA Smart & Adaptive Living"];
-        }
-
-        list.push({
-          id: `shop_${rec.id || idx}`,
-          name: title,
-          category,
-          description: rec.description,
-          roomSource: roomLabel,
-          stores: storeOptions
-        });
-      });
-    }
-
-    return list;
-  }, [activeScan]);
-
-  // Geocoding Submit using free Nominatim OpenStreetMap API
-  const handleLocationSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!locationSearch.trim()) return;
-
-    const toastId = toast.loading(`Searching coordinates for "${locationSearch}"...`);
-    try {
-      const norm = locationSearch.toLowerCase().trim();
-      if (SIMULATED_GEOLOCATIONS[norm]) {
-        const resolved = SIMULATED_GEOLOCATIONS[norm];
-        setMapCenter({ lat: resolved.lat, lng: resolved.lng });
-        setLocationSearch(resolved.name);
-        setActiveCityName(resolved.name);
-        toast.dismiss(toastId);
-        toast.success(`Centered search on ${resolved.name}`);
-        return;
-      }
-
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationSearch)}&limit=1`;
-      const response = await fetch(url, {
-        headers: {
-          "Accept-Language": "en",
-          "User-Agent": "CareLensAI/1.0 (smayan1814@gmail.com)"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Nominatim error status ${response.status}`);
-      }
-
-      const results = await response.json();
-      if (results && results.length > 0) {
-        const first = results[0];
-        const lat = parseFloat(first.lat);
-        const lng = parseFloat(first.lon);
-        const displayName = first.display_name;
-        
-        setMapCenter({ lat, lng });
-        const parts = displayName.split(",");
-        const cleanName = parts.length > 2 ? `${parts[0].trim()}, ${parts[1].trim()}` : displayName;
-        setLocationSearch(cleanName);
-        setActiveCityName(cleanName);
-        
-        toast.dismiss(toastId);
-        toast.success(`Centered on ${cleanName}`);
-      } else {
-        const resolved = hashSearchCoordinates(locationSearch);
-        setMapCenter({ lat: resolved.lat, lng: resolved.lng });
-        setLocationSearch(resolved.name);
-        setActiveCityName(resolved.name);
-        toast.dismiss(toastId);
-        toast.success(`Estimated location for "${locationSearch}"`);
-      }
-    } catch (err: any) {
-      console.error("Geocoding failed, falling back:", err);
-      const resolved = hashSearchCoordinates(locationSearch);
-      setMapCenter({ lat: resolved.lat, lng: resolved.lng });
-      setLocationSearch(resolved.name);
-      setActiveCityName(resolved.name);
-      toast.dismiss(toastId);
-      toast.success(`Estimated location for "${locationSearch}"`);
-    }
-  };
-
-  // GPS geolocation detector
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by your browser");
-      return;
-    }
-    
-    toast.loading("Locating GPS coordinates...");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        toast.dismiss();
-        const { latitude, longitude } = position.coords;
-        setMapCenter({ lat: latitude, lng: longitude });
-        setLocationSearch("Current Location");
-        setActiveCityName("Current Location");
-        toast.success("Synchronized with your GPS coordinates!");
-      },
-      (error) => {
-        toast.dismiss();
-        toast.error("GPS access denied. Sandbox active for Austin, TX.");
-        setMapCenter({ lat: 30.2672, lng: -97.7431 });
-        setLocationSearch("Austin, TX");
-        setActiveCityName("Austin, TX");
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
-  };
-
-  // Toggle Favorite
-  const toggleSaveBusiness = async (business: any) => {
-    if (!user) {
-      toast.error("Please log in to save resources!");
-      return;
-    }
-
-    const docId = `${user.uid}_${business.id}`;
-    const isSaved = savedIds.includes(business.id);
-
-    try {
-      if (isSaved) {
-        await deleteDoc(doc(db, "savedResources", docId));
-        toast.success(`Removed ${business.name} from saved favorites`);
-      } else {
-        const scanName = activeScan 
-          ? `${activeScan.roomType?.charAt(0).toUpperCase()}${activeScan.roomType?.slice(1)} Scan` 
-          : "General Home Safety";
-
-        await setDoc(doc(db, "savedResources", docId), {
-          userId: user.uid,
-          businessId: business.id,
-          businessData: business,
-          savedAt: new Date().toISOString(),
-          relatedProject: scanName
-        });
-        toast.success(`Saved ${business.name} to favorites!`);
-      }
-    } catch (err: any) {
-      console.error("Error saving resource:", err);
-      toast.error(`Could not update saved items: ${err.message}`);
-    }
-  };
-
-  const toggleCheckItem = (id: string) => {
-    setCheckedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const toggleComparison = (id: string) => {
-    setComparedBusinessIds((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter(item => item !== id);
-      }
-      if (prev.length >= 3) {
-        toast.error("You can compare up to 3 businesses at once");
-        return prev;
-      }
-      return [...prev, id];
-    });
-  };
-
-  // Initialize and Maintain Leaflet Map Instance
+  // Leaflet Map Initialization & Lifecycle
   useEffect(() => {
-    if (!mapRef.current) return;
+    // Dynamic loading of Leaflet styles for sandboxed isolation & container security
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(link);
 
-    // Initialize Leaflet Map
-    const map = L.map(mapRef.current, {
-      zoomControl: true,
-      scrollWheelZoom: true,
-    }).setView([mapCenter.lat, mapCenter.lng], mapZoom);
-
-    // Apply clean OpenStreetMap tiles
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
-    }).addTo(map);
-
-    const markersLayer = L.layerGroup().addTo(map);
-
-    mapInstanceRef.current = map;
-    markersLayerRef.current = markersLayer;
-
-    // Create user locator marker
-    const userMarker = L.marker([mapCenter.lat, mapCenter.lng], {
-      icon: L.divIcon({
-        html: `
-          <div class="relative flex items-center justify-center">
-            <div class="absolute w-6 h-6 bg-blue-400 rounded-full animate-ping opacity-60"></div>
-            <div class="relative w-4.5 h-4.5 bg-blue-600 rounded-full border-2 border-white shadow-md flex items-center justify-center">
-              <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
-            </div>
-          </div>
-        `,
-        className: "user-location-marker",
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      })
-    }).addTo(map).bindPopup(`<div class="font-bold text-xs p-1 text-slate-800">Your Search Location</div>`);
-    
-    userMarkerRef.current = userMarker;
+    // Apply custom styling overrides to make the map look extremely clean and matched to the Slate theme
+    const style = document.createElement("style");
+    style.id = "leaflet-custom-styles";
+    style.innerHTML = `
+      .leaflet-container {
+        font-family: inherit;
+        background-color: #f8fafc;
+      }
+      .dark .leaflet-container {
+        background-color: #171717;
+      }
+      .leaflet-tile-pane {
+        filter: grayscale(1) contrast(1.1) brightness(0.95);
+      }
+      .dark .leaflet-tile-pane {
+        filter: grayscale(1) invert(1) contrast(0.9) brightness(0.85);
+      }
+      .leaflet-bar {
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+        border-radius: 12px !important;
+        overflow: hidden;
+      }
+      .leaflet-bar a {
+        background-color: white !important;
+        color: #171717 !important;
+        border-bottom: 1px solid #f3f4f6 !important;
+        transition: background-color 0.15s;
+      }
+      .dark .leaflet-bar a {
+        background-color: #262626 !important;
+        color: #f5f5f5 !important;
+        border-bottom: 1px solid #333333 !important;
+      }
+      .leaflet-bar a:hover {
+        background-color: #f5f5f5 !important;
+      }
+      .dark .leaflet-bar a:hover {
+        background-color: #333333 !important;
+      }
+    `;
+    document.head.appendChild(style);
 
     return () => {
+      document.head.removeChild(link);
+      const customStyle = document.getElementById("leaflet-custom-styles");
+      if (customStyle) document.head.removeChild(customStyle);
+      
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        markersGroupRef.current = null;
       }
     };
   }, []);
 
-  // Sync Map center updates
+  // Initialize Leaflet Map Instance
   useEffect(() => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView([mapCenter.lat, mapCenter.lng], mapZoom);
-    }
-    if (userMarkerRef.current) {
-      userMarkerRef.current.setLatLng([mapCenter.lat, mapCenter.lng]);
-    }
-  }, [mapCenter, mapZoom]);
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-  // Sync Category Pin Markers updates
+    const map = L.map(mapContainerRef.current, {
+      center: [coords.lat, coords.lng],
+      zoom: 12,
+      zoomControl: false,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
+
+    L.control.zoom({ position: "topright" }).addTo(map);
+
+    const markersGroup = L.featureGroup().addTo(map);
+
+    mapInstanceRef.current = map;
+    markersGroupRef.current = markersGroup;
+  }, [activeTab]);
+
+  // Helper Unsplash category visualizer
+  const getBusinessPhoto = (provider: any) => {
+    if (provider.image) return provider.image;
+    
+    const category = provider.categories?.[0] || "Contractor";
+    const catLower = category.toLowerCase();
+    if (catLower.includes("plumb")) {
+      return "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&q=80&w=400";
+    }
+    if (catLower.includes("electric")) {
+      return "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&q=80&w=400";
+    }
+    if (catLower.includes("floor") || catLower.includes("tile")) {
+      return "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?auto=format&fit=crop&q=80&w=400";
+    }
+    if (catLower.includes("paint") || catLower.includes("coat")) {
+      return "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&q=80&w=400";
+    }
+    if (catLower.includes("light") || catLower.includes("illuminate")) {
+      return "https://images.unsplash.com/photo-1565814636199-ae8133055c1c?auto=format&fit=crop&q=80&w=400";
+    }
+    if (catLower.includes("hardware") || catLower.includes("store") || catLower.includes("supply")) {
+      return "https://images.unsplash.com/photo-1530124566582-ab0510450c80?auto=format&fit=crop&q=80&w=400";
+    }
+    if (catLower.includes("design") || catLower.includes("interior")) {
+      return "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=400";
+    }
+    return "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=400"; // neutral handyman/construction
+  };
+
+  // Strict category matching filter for robust, targeted directory lookups
+  const doesProviderMatchCategoryStrictly = (provider: any, category: string): boolean => {
+    if (!category || category === "All") return true;
+
+    const catLower = category.toLowerCase();
+    
+    // Convert categories to lowercase strings for bulletproof matching
+    const pCategories = (provider.categories || []).map((c: any) => 
+      typeof c === "string" ? c.toLowerCase() : (c.title?.toLowerCase() || "")
+    );
+    const pSpecialties = (provider.specialties || []).map((s: string) => s.toLowerCase());
+    const pName = (provider.name || "").toLowerCase();
+
+    const isMatchInList = (list: string[], term: string) => list.some(item => item.includes(term));
+    const isMatchInSpecialties = (term: string) => isMatchInList(pSpecialties, term);
+    const isMatchInCategories = (term: string) => isMatchInList(pCategories, term);
+
+    switch (category) {
+      case "ADA":
+      case "Accessibility":
+        return (
+          isMatchInCategories("accessibility") ||
+          isMatchInCategories("ada") ||
+          isMatchInCategories("handicap") ||
+          isMatchInCategories("senior") ||
+          isMatchInSpecialties("ada") ||
+          isMatchInSpecialties("ramp") ||
+          isMatchInSpecialties("accessibility") ||
+          isMatchInSpecialties("universal") ||
+          isMatchInSpecialties("senior") ||
+          isMatchInSpecialties("grab bar") ||
+          isMatchInSpecialties("handirail") ||
+          isMatchInSpecialties("handicap") ||
+          pName.includes("accessibility") ||
+          pName.includes("senior") ||
+          pName.includes("adaptive")
+        );
+
+      case "Plumbing":
+        return (
+          isMatchInCategories("plumbing") ||
+          isMatchInCategories("plumber") ||
+          isMatchInCategories("toilet") ||
+          isMatchInSpecialties("plumb") ||
+          isMatchInSpecialties("toilet") ||
+          isMatchInSpecialties("tub") ||
+          isMatchInSpecialties("shower") ||
+          isMatchInSpecialties("valve") ||
+          isMatchInSpecialties("grab bar") ||
+          pName.includes("plumbing") ||
+          pName.includes("shower")
+        );
+
+      case "Electrical":
+        return (
+          isMatchInCategories("electricians") ||
+          isMatchInCategories("electrical") ||
+          isMatchInCategories("lighting") ||
+          isMatchInSpecialties("electric") ||
+          isMatchInSpecialties("outlet") ||
+          isMatchInSpecialties("switch") ||
+          isMatchInSpecialties("wire") ||
+          isMatchInSpecialties("breaker") ||
+          isMatchInSpecialties("light") ||
+          isMatchInSpecialties("sensor") ||
+          pName.includes("electric") ||
+          pName.includes("light")
+        );
+
+      case "HVAC":
+        return (
+          isMatchInCategories("hvac") ||
+          isMatchInCategories("heating") ||
+          isMatchInSpecialties("hvac") ||
+          isMatchInSpecialties("air quality") ||
+          isMatchInSpecialties("thermostat") ||
+          isMatchInSpecialties("ventilation") ||
+          isMatchInSpecialties("duct") ||
+          isMatchInSpecialties("filter") ||
+          pName.includes("hvac") ||
+          pName.includes("heating") ||
+          pName.includes("air")
+        );
+
+      case "Flooring":
+        return (
+          isMatchInCategories("flooring") ||
+          isMatchInCategories("carpet") ||
+          isMatchInCategories("tile") ||
+          isMatchInSpecialties("floor") ||
+          isMatchInSpecialties("tile") ||
+          isMatchInSpecialties("carpet") ||
+          isMatchInSpecialties("rug") ||
+          isMatchInSpecialties("slip") ||
+          isMatchInSpecialties("mat") ||
+          pName.includes("floor") ||
+          pName.includes("carpet") ||
+          pName.includes("tile")
+        );
+
+      case "Roofing":
+        return (
+          isMatchInCategories("roofing") ||
+          isMatchInSpecialties("roof") ||
+          isMatchInSpecialties("shingle") ||
+          isMatchInSpecialties("gutter") ||
+          pName.includes("roof") ||
+          pName.includes("exterior")
+        );
+
+      case "Cabinets":
+        return (
+          isMatchInCategories("cabinet") ||
+          isMatchInCategories("cabinetry") ||
+          isMatchInCategories("cabinets") ||
+          isMatchInSpecialties("cabinet") ||
+          isMatchInSpecialties("shelves") ||
+          isMatchInSpecialties("cupboard") ||
+          isMatchInSpecialties("drawer") ||
+          isMatchInSpecialties("handle") ||
+          pName.includes("cabinet") ||
+          pName.includes("kitchen") || 
+          pName.includes("remodeling") ||
+          pName.includes("depot") ||
+          pName.includes("lowe's") ||
+          pName.includes("ikea")
+        );
+
+      case "Kitchen":
+        return (
+          isMatchInCategories("kitchen") ||
+          isMatchInCategories("kitchenremodeling") ||
+          isMatchInSpecialties("kitchen") ||
+          isMatchInSpecialties("countertop") ||
+          isMatchInSpecialties("cabinet") ||
+          isMatchInSpecialties("sink") ||
+          pName.includes("kitchen") ||
+          pName.includes("counter") ||
+          pName.includes("depot") ||
+          pName.includes("lowe's") ||
+          pName.includes("ikea")
+        );
+
+      case "Bathroom":
+        return (
+          isMatchInCategories("bathroom") ||
+          isMatchInCategories("bathroomremodeling") ||
+          isMatchInSpecialties("bathroom") ||
+          isMatchInSpecialties("shower") ||
+          isMatchInSpecialties("tub") ||
+          isMatchInSpecialties("grab bar") ||
+          isMatchInSpecialties("toilet") ||
+          pName.includes("bath") ||
+          pName.includes("shower") ||
+          pName.includes("glass") ||
+          pName.includes("depot") ||
+          pName.includes("lowe's")
+        );
+
+      case "Hardware":
+        return (
+          isMatchInCategories("hardware") ||
+          isMatchInSpecialties("hardware") ||
+          isMatchInSpecialties("grab bar") ||
+          isMatchInSpecialties("rail") ||
+          isMatchInSpecialties("tool") ||
+          isMatchInSpecialties("fasten") ||
+          pName.includes("hardware") ||
+          pName.includes("depot") ||
+          pName.includes("lowe's")
+        );
+
+      case "Medical Equipment":
+        return (
+          isMatchInCategories("medicalsupplies") ||
+          isMatchInCategories("medical") ||
+          isMatchInSpecialties("medical") ||
+          isMatchInSpecialties("wheelchair") ||
+          isMatchInSpecialties("hospital bed") ||
+          isMatchInSpecialties("walker") ||
+          isMatchInSpecialties("scooter") ||
+          isMatchInSpecialties("grab bar") ||
+          pName.includes("medical") ||
+          pName.includes("supplies")
+        );
+
+      case "Painting":
+        return (
+          isMatchInCategories("painters") ||
+          isMatchInCategories("paint") ||
+          isMatchInSpecialties("paint") ||
+          isMatchInSpecialties("coating") ||
+          pName.includes("paint") ||
+          pName.includes("sherwin") ||
+          pName.includes("depot") ||
+          pName.includes("lowe's")
+        );
+
+      case "Handyman":
+        return (
+          isMatchInCategories("handyman") ||
+          isMatchInCategories("contractors") ||
+          isMatchInSpecialties("handyman") ||
+          isMatchInSpecialties("install") ||
+          isMatchInSpecialties("mount") ||
+          isMatchInSpecialties("repair") ||
+          pName.includes("handyman") ||
+          pName.includes("contract") ||
+          pName.includes("depot") ||
+          pName.includes("lowe's")
+        );
+
+      default:
+        return (
+          isMatchInCategories(catLower) ||
+          isMatchInSpecialties(catLower) ||
+          pName.includes(catLower)
+        );
+    }
+  };
+
+  // Compute reactive Filtered Providers
+  const filteredProviders = useMemo(() => {
+    let result = [...liveProviders];
+
+    // Apply strict category filtering
+    if (selectedCategory && selectedCategory !== "All") {
+      result = result.filter(p => doesProviderMatchCategoryStrictly(p, selectedCategory));
+    }
+
+    // Apply main text query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.specialties.some((s: string) => s.toLowerCase().includes(q)) ||
+          p.categories.some((c: string) => c.toLowerCase().includes(q))
+      );
+    }
+
+    // Apply distance limit
+    result = result.filter((p) => p.distance <= searchRadius);
+
+    // Apply rating filter
+    if (minRating > 0) {
+      result = result.filter((p) => p.rating >= minRating);
+    }
+
+    // Apply price tier filter
+    if (priceLevel !== null) {
+      result = result.filter((p) => {
+        const itemPrice = p.priceLevel || (p.price ? p.price.length : 1);
+        return itemPrice <= priceLevel;
+      });
+    }
+
+    // Apply Open Now filter
+    if (openNow) {
+      result = result.filter((p) => {
+        if (p.is_closed !== undefined) return !p.is_closed;
+        return p.openHours && p.openHours !== "Closed";
+      });
+    }
+
+    // Apply eco-friendly filter
+    if (ecoFriendlyOnly) {
+      result = result.filter((p) => p.ecoFriendly === true || p.specialties.some((s: string) => s.toLowerCase().includes("eco") || s.toLowerCase().includes("green") || s.toLowerCase().includes("sust")));
+    }
+
+    // Apply availability filter
+    if (fastestAvailabilityOnly) {
+      result = result.filter((p) => p.fastestAvailability === true || p.specialties.some((s: string) => s.toLowerCase().includes("emergency") || s.toLowerCase().includes("same day") || s.toLowerCase().includes("rapid") || s.toLowerCase().includes("fast")));
+    }
+
+    // Map match scores
+    const scored = result.map(p => {
+      const matchScore = calculateMatchScore(p, latestScan);
+      const driveTime = p.durationMinutes !== undefined && p.durationMinutes !== null 
+        ? p.durationMinutes 
+        : Math.max(3, Math.round(p.distance * 2.3 + 2)); // highly realistic fallback formula
+      
+      return {
+        ...p,
+        matchScore,
+        driveTime
+      };
+    });
+
+    // Apply Sorting choices
+    if (sortBy === "match") {
+      scored.sort((a, b) => b.matchScore - a.matchScore);
+    } else if (sortBy === "rating") {
+      scored.sort((a, b) => b.rating - a.rating);
+    } else if (sortBy === "distance") {
+      scored.sort((a, b) => a.distance - b.distance);
+    } else if (sortBy === "popularity") {
+      scored.sort((a, b) => b.reviewsCount - a.reviewsCount);
+    }
+
+    return scored;
+  }, [
+    liveProviders,
+    searchQuery,
+    searchRadius,
+    minRating,
+    priceLevel,
+    openNow,
+    ecoFriendlyOnly,
+    fastestAvailabilityOnly,
+    sortBy,
+    coords,
+    latestScan
+  ]);
+
+  // Selected Provider Item computed
+  const selectedProvider = useMemo(() => {
+    return filteredProviders.find(p => p.id === selectedProviderId) || null;
+  }, [filteredProviders, selectedProviderId]);
+
+  // Synchronize Leaflet Markers whenever filtered list, selection, or map coordinate centers change
   useEffect(() => {
     const map = mapInstanceRef.current;
-    const markersLayer = markersLayerRef.current;
-    if (!map || !markersLayer) return;
+    const markersGroup = markersGroupRef.current;
+    if (!map || !markersGroup) return;
 
-    markersLayer.clearLayers();
+    // Clear previous elements
+    markersGroup.clearLayers();
 
-    filteredBusinesses.forEach((biz) => {
-      const isSelected = selectedBusinessId === biz.id;
-      const color = CATEGORY_COLORS_HEX[biz.categories[0]] || "#3b82f6";
+    // 1. Plot current User's search center marker
+    const userIcon = L.divIcon({
+      html: `
+        <div class="relative flex items-center justify-center">
+          <span class="absolute inline-flex h-8 w-8 animate-ping rounded-full bg-indigo-400 opacity-75"></span>
+          <div class="relative w-7 h-7 bg-indigo-600 rounded-full border-2 border-white flex items-center justify-center text-white shadow-xl">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+        </div>
+      `,
+      className: "custom-user-marker",
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+    L.marker([coords.lat, coords.lng], { icon: userIcon }).addTo(markersGroup);
+
+    // Track boundary layout to fit everything nicely on screen
+    const bounds = L.latLngBounds([[coords.lat, coords.lng]]);
+
+    // 2. Plot Provider markers with live smart Match Score badges inside them!
+    filteredProviders.forEach((prov) => {
+      const isSelected = selectedProviderId === prov.id;
       
-      const marker = L.marker([biz.lat, biz.lng], {
-        icon: L.divIcon({
-          html: `
-            <div class="relative flex items-center justify-center">
-              ${isSelected ? `<div class="absolute w-9 h-9 bg-primary/20 rounded-full animate-pulse"></div>` : ""}
-              <div class="absolute -top-3 -right-3 bg-slate-900 border border-slate-700 text-white rounded-full px-1 py-0.5 text-[8px] font-bold z-10 shadow">
-                ${biz.aiScore}%
-              </div>
-              <div class="relative flex items-center justify-center w-8 h-8 rounded-full border-2 border-white shadow-md transition-transform hover:scale-110" style="background-color: ${color}">
-                <span class="text-white text-[10px] font-black">${biz.categories[0].charAt(0)}</span>
-              </div>
+      const providerIcon = L.divIcon({
+        html: `
+          <div class="flex items-center justify-center transition-all duration-300">
+            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg border-2 text-[11px] font-bold transition-all ${
+              isSelected 
+                ? 'bg-rose-500 border-white text-white scale-115 ring-4 ring-rose-500/30' 
+                : 'bg-white border-neutral-200 text-neutral-800 hover:border-indigo-500 hover:text-indigo-600 dark:bg-neutral-900 dark:border-neutral-800 dark:text-neutral-100'
+            }">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="w-3.5 h-3.5 shrink-0"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span class="whitespace-nowrap">${prov.matchScore}% Match</span>
             </div>
-          `,
-          className: `custom-marker-${biz.id}`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 32],
-        })
+          </div>
+        `,
+        className: "custom-provider-marker",
+        iconSize: [110, 42],
+        iconAnchor: [55, 21]
       });
 
-      const popupHtml = `
-        <div class="p-2 max-w-[180px] font-sans leading-tight">
-          <span class="text-[8px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-primary/20 bg-primary/5 text-primary">
-            ${biz.aiScore}% Match
-          </span>
-          <h4 class="font-extrabold text-xs text-slate-800 mt-1.5 mb-0.5">${biz.name}</h4>
-          <p class="text-[9px] text-slate-500">${biz.address}</p>
-        </div>
-      `;
-
-      marker.bindPopup(popupHtml);
-
+      const marker = L.marker([prov.lat, prov.lng], { icon: providerIcon });
+      
       marker.on("click", () => {
-        setSelectedBusinessId(biz.id);
-        const element = document.getElementById(`biz-card-${biz.id}`);
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        setSelectedProviderId(prov.id);
+        
+        // Scroll the matching listing card into view inside the left list panel
+        const cardElement = document.getElementById(`provider-card-${prov.id}`);
+        if (cardElement) {
+          cardElement.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       });
 
-      markersLayer.addLayer(marker);
-
-      if (isSelected) {
-        marker.openPopup();
-      }
+      marker.addTo(markersGroup);
+      bounds.extend([prov.lat, prov.lng]);
     });
-  }, [filteredBusinesses, selectedBusinessId]);
+
+    // Auto fit boundary of map only if elements are visible
+    if (filteredProviders.length > 0) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
+    } else {
+      map.setView([coords.lat, coords.lng], 12);
+    }
+  }, [filteredProviders, selectedProviderId, coords, activeTab]);
+
+  // Smooth flying effect when selecting a card from the list view
+  useEffect(() => {
+    if (selectedProviderId && mapInstanceRef.current && activeTab === 'local') {
+      const prov = filteredProviders.find(p => p.id === selectedProviderId);
+      if (prov) {
+        mapInstanceRef.current.setView([prov.lat, prov.lng], 14, {
+          animate: true,
+          duration: 1
+        });
+      }
+    }
+  }, [selectedProviderId]);
+
+  // Compute products list based on query and selected category filter
+  const filteredProducts = useMemo(() => {
+    let result = [...ALL_PRODUCTS];
+    
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q)
+      );
+    }
+
+    if (selectedCategory !== "All") {
+      result = result.filter(
+        (p) => p.category.toLowerCase().includes(selectedCategory.toLowerCase())
+      );
+    }
+
+    return result;
+  }, [searchQuery, selectedCategory]);
+
+  // Save/Unsave persistent bookmarking to Firestore
+  const handleToggleSave = async (item: any, type: 'provider' | 'product') => {
+    if (!user) {
+      toast.error("Please log in or register to bookmark home safety resources.");
+      return;
+    }
+
+    const existingSaved = savedItems.find(
+      (saved) => saved.type === type && saved.resourceId === item.id
+    );
+
+    try {
+      if (existingSaved) {
+        await deleteDoc(doc(db, "savedResources", existingSaved.firestoreId));
+        toast.success(`Removed from your saved list`);
+      } else {
+        await addDoc(
+          collection(db, "savedResources"),
+          cleanUndefined({
+            userId: user.uid,
+            type,
+            resourceId: item.id,
+            resourceData: item,
+            createdAt: new Date().toISOString(),
+          })
+        );
+        toast.success(`Saved to your favorites`);
+      }
+    } catch (error) {
+      handleFirestoreError(
+        error,
+        existingSaved ? OperationType.DELETE : OperationType.CREATE,
+        `savedResources/${existingSaved?.firestoreId || "new"}`
+      );
+      toast.error("Failed to update bookmarked items.");
+    }
+  };
+
+  // Handle Nominatim forward geocoding + robust deterministic fallback
+  const handleSearchSubmit = async () => {
+    if (!locationQuery.trim()) return;
+    
+    setIsLoading(true);
+    toast.loading(`Geocoding coordinates for: ${locationQuery}...`);
+    
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1`;
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "CareLensAI/1.0 (carelens@example.com)" // friendly user agent required by Nominatim terms
+        }
+      });
+      
+      toast.dismiss();
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.length > 0) {
+          const result = data[0];
+          const displayStr = result.display_name.split(",")[0] + ", " + (result.display_name.split(",")[1] || "").trim();
+          
+          setActiveCityName(displayStr);
+          setCoords({ lat: parseFloat(result.lat), lng: parseFloat(result.lon) });
+          toast.success(`Centered discovery map on ${displayStr}`);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Nominatim service rate-limited, engaging high-fidelity local lookup:", err);
+    }
+    
+    // Smooth high-fidelity fallback to ensure app NEVER breaks for the user
+    toast.dismiss();
+    const loc = hashSearchCoordinates(locationQuery);
+    setActiveCityName(loc.name);
+    setCoords({ lat: loc.lat, lng: loc.lng });
+    toast.success(`Centered search on ${loc.name} (Local approximation)`);
+    setIsLoading(false);
+  };
+
+  // Popular City Fast Access
+  const handleCityClick = (city: { name: string; lat: number; lng: number }) => {
+    setLocationQuery(city.name);
+    setActiveCityName(city.name);
+    setCoords({ lat: city.lat, lng: city.lng });
+    toast.success(`Centered discovery search on ${city.name}`);
+  };
+
+  // Navigator Geolocation (GPS coordinates) reverse geocoded via Nominatim
+  const handleGPSLocate = () => {
+    if (!navigator.geolocation) {
+      toast.error("GPS Geolocation is not supported by this browser.");
+      return;
+    }
+    
+    toast.loading("Fetching your GPS coordinates...");
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        toast.dismiss();
+        const { latitude, longitude } = position.coords;
+        setCoords({ lat: latitude, lng: longitude });
+        
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+            { headers: { "User-Agent": "CareLensAI/1.0 (carelens@example.com)" } }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            const city = data.address.city || data.address.town || data.address.village || "My Location";
+            const state = data.address.state || "";
+            const name = state ? `${city}, ${state}` : city;
+            setLocationQuery(name);
+            setActiveCityName(name);
+          } else {
+            setLocationQuery("My Location");
+            setActiveCityName("My Location");
+          }
+        } catch {
+          setLocationQuery("My Location");
+          setActiveCityName("My Location");
+        }
+        toast.success("GPS Location acquired successfully!");
+      },
+      (error) => {
+        toast.dismiss();
+        toast.error("Unable to access GPS coordinates.");
+        console.error(error);
+      }
+    );
+  };
+
+  // Automatically adjust filters based on AI Scan recommendations
+  const handleRecommendationClick = async (rec: any, idx: number) => {
+    const recId = rec.id || idx;
+    if (classifyingRecId !== null) return; // Prevent double clicks
+    
+    setClassifyingRecId(recId);
+    const toastId = toast.loading(`AI classifying "${rec.title}"...`);
+
+    try {
+      const response = await fetch("/api/classify-suggestion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: rec.title, description: rec.description }),
+      });
+
+      if (!response.ok) {
+        throw new Error("AI classification request failed");
+      }
+
+      const data = await response.json();
+      const classifiedCategory = data.category || "All";
+      const suggestedQuery = data.suggestedQuery || rec.title;
+
+      setSelectedCategory(classifiedCategory);
+      setSearchQuery("");
+      setActiveTab("local");
+
+      toast.success(`AI classified as "${classifiedCategory}"! Nearby specialists & gear updated.`, { id: toastId });
+    } catch (err) {
+      console.error("Failed to classify suggestion via AI:", err);
+      // Fallback matching
+      const titleLower = rec.title.toLowerCase();
+      let fallbackCategory = "All";
+      if (
+        titleLower.includes("grab bar") || 
+        titleLower.includes("shower") || 
+        titleLower.includes("tub") || 
+        titleLower.includes("bathroom")
+      ) {
+        fallbackCategory = "Bathroom";
+      } else if (
+        titleLower.includes("light") || 
+        titleLower.includes("illumination") || 
+        titleLower.includes("lamp")
+      ) {
+        fallbackCategory = "Electrical";
+      } else if (
+        titleLower.includes("mat") || 
+        titleLower.includes("floor") || 
+        titleLower.includes("rug") ||
+        titleLower.includes("slip") ||
+        titleLower.includes("trip")
+      ) {
+        fallbackCategory = "Flooring";
+      } else if (
+        titleLower.includes("ramp") || 
+        titleLower.includes("wheelchair") || 
+        titleLower.includes("step")
+      ) {
+        fallbackCategory = "Accessibility";
+      }
+
+      setSelectedCategory(fallbackCategory);
+      setSearchQuery("");
+      setActiveTab("local");
+      toast.success(`Smart match activated: "${rec.title}"`, { id: toastId });
+    } finally {
+      setClassifyingRecId(null);
+    }
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto pb-24 px-4">
-      {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-4 border-b border-border/50">
+    <div className="max-w-7xl mx-auto space-y-8 pb-16 px-6">
+      
+      {/* Header Panel */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-12 pb-8 border-b border-border/40">
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-3xl font-extrabold tracking-tight">Local Resources</h1>
-            <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1 font-bold">
-              <Sparkles className="h-3.5 w-3.5" /> CareLens AI-Powered Match
-            </Badge>
-          </div>
-          <p className="text-muted-foreground mt-1.5 text-sm">
-            Find nearby physical stores, contractors, and home services related to your room scans using OpenStreetMap.
+          <h1 className="text-3xl font-medium tracking-tight text-foreground flex items-center gap-3">
+            <Building className="h-7 w-7 text-muted-foreground" />
+            Marketplace
+          </h1>
+          <p className="text-muted-foreground text-sm mt-2 max-w-lg">
+            Discover local professionals, products, and community grants to upgrade your home safely.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <Badge variant="outline" className="px-3 py-1.5 bg-emerald-500/5 text-emerald-600 border-emerald-500/20 flex items-center gap-1.5 font-bold">
-            <Globe className="h-3.5 w-3.5 text-emerald-500 animate-pulse" /> 100% Free Live Map
-          </Badge>
-        </div>
-      </div>
-
-      {/* AI Scanner Integration Selector Hub */}
-      <Card className="border border-primary/20 bg-primary/[0.02] shadow-sm overflow-hidden rounded-xl">
-        <CardContent className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary animate-pulse" />
-              <h2 className="text-base font-extrabold">Active Room Scan Linker</h2>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Select any scan report to dynamically recalibrate contractor Match Scores and customize your Renovations Shopping Checklist.
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className="text-xs font-bold text-muted-foreground">Linked Scan:</span>
-            <select
-              value={selectedScanId}
-              onChange={(e) => {
-                setSelectedScanId(e.target.value);
-                toast.success("Recalibrated compatibility scores based on the selected report!");
+        {/* Tab Selection */}
+        <div className="flex bg-muted/30 p-1 rounded-full border border-border/50 self-start md:self-auto shadow-sm">
+          {[
+            { id: 'local', label: 'Local Specialists', icon: MapPin },
+            { id: 'saved', label: 'Favorites', icon: Heart }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id as any);
+                setSelectedCategory("All");
               }}
-              className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary min-w-[210px]"
+              className={`flex items-center justify-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-colors ${
+                activeTab === tab.id 
+                  ? 'bg-background text-foreground shadow-sm border border-border/50' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent'
+              }`}
             >
-              {scanOptions.map(opt => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Selected Scan Diagnostics Mini-Banner */}
-      <div className="p-4 rounded-xl bg-card border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <span className="text-[10px] font-bold text-primary uppercase tracking-widest block">Active Scan Profile</span>
-          <h3 className="font-extrabold text-sm capitalize">{activeScan.roomType} Report Hazards ({activeScan.hazards?.length || 0})</h3>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {activeScan.hazards?.map((haz: any) => (
-              <Badge key={haz.id} variant="outline" className="text-[10px] bg-red-500/5 text-red-500 border-red-500/10 py-0.5">
-                ⚠ {haz.title}
-              </Badge>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 bg-muted/40 p-2.5 rounded-lg border border-border/50 self-start sm:self-auto shrink-0">
-          <div className="text-right">
-            <div className="text-[9px] font-bold text-muted-foreground uppercase">Safety Score</div>
-            <div className="text-lg font-black text-foreground">{activeScan.safetyScore || 80}/100</div>
-          </div>
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+              {tab.id === 'saved' && savedItems.length > 0 && (
+                <span className="ml-1.5 bg-foreground/10 text-foreground rounded-full text-[10px] px-2 py-0.5 font-semibold">
+                  {savedItems.length}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Main Grid View */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left: Professional directory, Shopping list, and Favorites */}
-        <div className="lg:col-span-7 xl:col-span-8 space-y-6">
+      {/* Main Core Section */}
+      <div className="grid lg:grid-cols-12 gap-8 items-start">
+        
+        {/* Left Column: Context panel, filters, and smart AI matching suggestions (Span 4) */}
+        <div className="lg:col-span-4 space-y-6">
           
-          {/* Search Area bar */}
-          <Card className="border border-border/60 bg-card/60 backdrop-blur-sm shadow-sm overflow-hidden">
-            <CardContent className="p-4">
-              <form onSubmit={handleLocationSubmit} className="flex flex-col sm:flex-row gap-2.5">
-                <div className="relative flex-1">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search city, ZIP code, or state..."
-                    value={locationSearch}
-                    onChange={(e) => setLocationSearch(e.target.value)}
-                    className="pl-9 h-10 bg-background/50 border-border/50 text-xs font-semibold"
+          {/* Main Keywords and Location Search */}
+          <div className="bg-card p-6 rounded-2xl border border-border/50 shadow-sm space-y-5">
+            <h3 className="font-medium text-sm text-foreground">Search Settings</h3>
+            
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input 
+                id="keyword-filter-bar"
+                placeholder="Search specialties (e.g., grab bars)..." 
+                className="pl-9 h-10 rounded-xl bg-background border-border/50 text-sm focus-visible:ring-1 focus-visible:ring-ring" 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {activeTab === 'local' && (
+              <div className="space-y-4 pt-2">
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSearchSubmit();
+                }} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="search-address-input"
+                      placeholder="City, state, or ZIP..." 
+                      className="pl-9 h-10 rounded-xl bg-background border-border/50 text-sm focus-visible:ring-1 focus-visible:ring-ring" 
+                      value={locationQuery}
+                      onChange={(e) => setLocationQuery(e.target.value)}
+                    />
+                  </div>
+                  <Button id="submit-search-btn" type="submit" variant="default" className="h-10 px-4 rounded-xl text-xs">
+                    Find
+                  </Button>
+                </form>
+
+                {/* GPS and Popular cities quick selection */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-muted-foreground">Quick Locations</span>
+                    <button 
+                      id="use-gps-locate-btn"
+                      onClick={handleGPSLocate}
+                      className="text-[11px] font-medium text-foreground hover:underline flex items-center gap-1 transition-all"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-muted-foreground" /> Use GPS
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {QUICK_CITIES.map(city => {
+                      const isActive = activeCityName.toLowerCase().includes(city.name.split(',')[0].toLowerCase());
+                      return (
+                        <button
+                          key={city.name}
+                          id={`quick-search-city-${city.name.replace(/[^a-zA-Z]/g, '')}`}
+                          onClick={() => handleCityClick(city)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                            isActive
+                              ? 'bg-foreground text-background border-foreground shadow-sm'
+                              : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                          }`}
+                        >
+                          {city.name.split(',')[0]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Collapsible Advanced Filters Panel */}
+          {activeTab === 'local' && (
+            <div className="bg-card p-6 rounded-2xl border border-border/50 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-sm text-foreground flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+                  Filters
+                </h3>
+                <button 
+                  id="toggle-filters-drawer-btn"
+                  onClick={() => setShowFiltersDrawer(!showFiltersDrawer)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-medium"
+                >
+                  {showFiltersDrawer ? "Hide" : "Show"}
+                </button>
+              </div>
+
+              {/* Collapsible filter items */}
+              <div className={`space-y-4 transition-all duration-300 overflow-hidden ${showFiltersDrawer ? 'max-h-[500px] opacity-100 mt-4' : 'max-h-0 opacity-0 pointer-events-none mt-0'}`}>
+                
+                {/* Search radius slider */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-medium text-foreground">
+                    <span>Search Radius</span>
+                    <span className="text-muted-foreground">{searchRadius} miles</span>
+                  </div>
+                  <input 
+                    id="search-radius-slider"
+                    type="range" 
+                    min="5" 
+                    max="50" 
+                    step="5"
+                    value={searchRadius} 
+                    onChange={(e) => setSearchRadius(parseInt(e.target.value))}
+                    className="w-full accent-foreground cursor-pointer"
                   />
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDetectLocation}
-                    className="h-10 px-3 border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted"
-                    title="Find current GPS coordinates"
-                  >
-                    <Compass className="h-4.5 w-4.5" />
-                  </Button>
-                  <Button type="submit" className="h-10 px-4 text-xs font-bold shrink-0">
-                    Search Area
-                  </Button>
+
+                {/* Rating filter select */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-medium text-muted-foreground">Minimum Rating</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[0, 3.5, 4.0, 4.5].map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        id={`rating-filter-choice-${val}`}
+                        onClick={() => setMinRating(val)}
+                        className={`py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          minRating === val
+                            ? 'bg-foreground text-background border-foreground'
+                            : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                        }`}
+                      >
+                        {val === 0 ? "Any" : `${val}★`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </form>
 
-              {/* Predefined Geolocation Quick buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 mt-3 text-[10px] text-muted-foreground">
-                <span className="font-semibold mr-1">Preloaded Cities:</span>
-                {[
-                  { label: "Austin", key: "austin" },
-                  { label: "Frisco", key: "frisco" },
-                  { label: "Plano", key: "plano" },
-                  { label: "Dallas", key: "dallas" },
-                  { label: "Houston", key: "houston" },
-                  { label: "New York", key: "new york" },
-                  { label: "San Francisco", key: "san francisco" },
-                  { label: "Los Angeles", key: "los angeles" },
-                  { label: "Seattle", key: "seattle" },
-                  { label: "Miami", key: "miami" }
-                ].map((city) => (
-                  <button
-                    key={city.key}
-                    type="button"
-                    onClick={() => {
-                      const geo = SIMULATED_GEOLOCATIONS[city.key];
-                      setMapCenter({ lat: geo.lat, lng: geo.lng });
-                      setLocationSearch(geo.name);
-                      setActiveCityName(geo.name);
-                      toast.success(`Centered map on ${geo.name}`);
-                    }}
-                    className="px-2 py-0.5 rounded border border-border/40 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground font-semibold transition-all"
-                  >
-                    {city.label}
-                  </button>
-                ))}
+                {/* Price level select */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-medium text-muted-foreground">Price Tier</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[null, 1, 2, 3, 4].map((val) => (
+                      <button
+                        key={val === null ? 'any' : val}
+                        type="button"
+                        id={`price-filter-choice-${val}`}
+                        onClick={() => setPriceLevel(val)}
+                        className={`py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          priceLevel === val
+                            ? 'bg-foreground text-background border-foreground'
+                            : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                        }`}
+                      >
+                        {val === null ? "Any" : "$".repeat(val)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Switch Filters */}
+                <div className="space-y-4 pt-4 border-t border-border/50">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="filter-open-now" className="text-xs font-medium text-foreground">Open Now Only</Label>
+                    <Switch 
+                      id="filter-open-now" 
+                      checked={openNow} 
+                      onCheckedChange={setOpenNow} 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="filter-eco-friendly" className="text-xs font-medium text-foreground">Eco-Friendly</Label>
+                    <Switch 
+                      id="filter-eco-friendly" 
+                      checked={ecoFriendlyOnly} 
+                      onCheckedChange={setEcoFriendlyOnly} 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="filter-fastest" className="text-xs font-medium text-foreground">Same-Day Service</Label>
+                    <Switch 
+                      id="filter-fastest" 
+                      checked={fastestAvailabilityOnly} 
+                      onCheckedChange={setFastestAvailabilityOnly} 
+                    />
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Navigation Tabs */}
-          <div className="flex border-b border-border/50">
-            {[
-              { id: "search", label: "Professional Directory", count: filteredBusinesses.length },
-              { id: "shopping", label: "Shopping Checklist", count: shoppingList.length },
-              { id: "saved", label: "Favorites", count: savedResources.length }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-4 py-2.5 border-b-2 font-bold text-xs flex items-center gap-2 transition-all ${
-                  activeTab === tab.id
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-                <Badge variant="secondary" className="px-1.5 py-0 text-[9px] bg-muted font-black text-muted-foreground">
-                  {tab.count}
-                </Badge>
-              </button>
-            ))}
+              {/* Sort By Choice always visible */}
+              <div className="space-y-2 pt-4 border-t border-border/50 mt-4">
+                <label className="text-[11px] font-medium text-muted-foreground">Sort By</label>
+                <select
+                  id="sort-listings-selector"
+                  value={sortBy}
+                  onChange={(e: any) => setSortBy(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="match">Highest Match Score</option>
+                  <option value="rating">Highest Rating</option>
+                  <option value="distance">Closest Distance</option>
+                  <option value="popularity">Most Reviewed</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* AI Safety recommendations list tailored to latest scan findings */}
+          <div className="bg-muted/30 rounded-2xl p-6 border border-border/50 shadow-sm space-y-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-foreground" />
+              <h3 className="font-medium text-sm text-foreground">Smart Suggestions</h3>
+            </div>
+            
+            {latestScan ? (
+              <div className="space-y-3">
+                <p className="text-xs text-neutral-500 leading-relaxed">
+                  Tailored to your latest <strong className="text-neutral-700 dark:text-neutral-300">{latestScan.roomType}</strong> safety scan. Click a recommendation to instantly focus matched contractors and gears:
+                </p>
+                <div className="space-y-2.5">
+                  {latestScan.recommendations?.slice(0, 4).map((rec, idx) => {
+                    const recId = rec.id || idx;
+                    const isCurrentClassifying = classifyingRecId === recId;
+                    return (
+                      <div 
+                        key={recId} 
+                        onClick={() => handleRecommendationClick(rec, idx)}
+                        className={`group flex flex-col gap-1.5 bg-background p-4 rounded-xl border hover:border-foreground/30 hover:shadow-sm transition-all cursor-pointer active:scale-95 ${
+                          isCurrentClassifying 
+                            ? 'border-foreground/50 ring-2 ring-foreground/5 pointer-events-none' 
+                            : 'border-border/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-foreground group-hover:text-muted-foreground transition-colors line-clamp-1">
+                            {rec.title}
+                          </span>
+                          {isCurrentClassifying ? (
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium animate-pulse shrink-0">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>Scanning...</span>
+                            </div>
+                          ) : (
+                            <Badge className={`${
+                              rec.priority === 'Critical' || rec.priority === 'High'
+                                ? 'bg-destructive/10 text-destructive border-transparent'
+                                : 'bg-warning/10 text-warning border-transparent'
+                            } border shrink-0 text-[9px] px-1.5 py-0`} variant="outline">
+                              {rec.priority}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+                          {rec.description}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6 text-neutral-400 space-y-2">
+                <p className="text-xs leading-relaxed">
+                  No scan reports available yet. Upload and scan a room to trigger precise AI-matched local help!
+                </p>
+              </div>
+            )}
           </div>
+        </div>
 
-          <AnimatePresence mode="wait">
-            {activeTab === "search" && (
-              <motion.div
-                key="search-tab"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
-              >
-                {/* Filters sidebar drawer/card */}
-                <Card className="border border-border/50 bg-card/40">
-                  <CardContent className="p-4 space-y-4">
-                    {/* Radius Slider & Match Minimum Slider */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span>Search Radius</span>
-                          <span className="text-primary">{distanceFilter} miles</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="5"
-                          max="50"
-                          value={distanceFilter}
-                          onChange={(e) => setDistanceFilter(Number(e.target.value))}
-                          className="w-full accent-primary h-1 bg-muted rounded-lg appearance-none cursor-pointer"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span>Compatibility Match %</span>
-                          <span className="text-primary">{matchScoreFilter === 0 ? "Any" : `${matchScoreFilter}%+`}</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {[0, 80, 90, 95].map((sc) => (
-                            <button
-                              key={sc}
-                              type="button"
-                              onClick={() => setMatchScoreFilter(sc)}
-                              className={`flex-1 py-1 rounded text-[10px] font-bold border transition-all ${
-                                matchScoreFilter === sc
-                                  ? "bg-primary border-primary text-primary-foreground"
-                                  : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              {sc === 0 ? "Any" : `${sc}%+`}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Filter Pills */}
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider block">Specialty & Quality Tags</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { id: "luxury", label: "Luxury Tier", val: luxuryFilter, setter: setLuxuryFilter },
-                          { id: "eco", label: "Eco-Friendly", val: ecoFriendlyFilter, setter: setEcoFriendlyFilter },
-                          { id: "fastest", label: "Fastest Availability", val: fastestFilter, setter: setFastestFilter },
-                          { id: "popular", label: "High Reviews (150+)", val: popularityFilter, setter: setPopularityFilter },
-                          { id: "highest", label: "Highest Rated (4.7★+)", val: highestRatedFilter, setter: setHighestRatedFilter },
-                          { id: "open", label: "Open Now", val: openNowFilter, setter: setOpenNowFilter }
-                        ].map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => item.setter(!item.val)}
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
-                              item.val
-                                ? "bg-primary/10 border-primary text-primary"
-                                : "bg-background border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Category Chips Horizontal scroll */}
-                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none">
-                  {CATEGORIES.map((cat) => (
+        {/* Right Column: Interactive split screen display: listing on left, interactive leaflet map on right (Span 8) */}
+        <div className="lg:col-span-8 flex flex-col min-h-[680px] bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
+          
+          {/* Header section with categories bar */}
+          <div className="p-6 border-b border-border/40 bg-muted/20 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium text-base tracking-tight text-foreground">
+                {activeTab === 'local' && `Local Pros in ${activeCityName} (${filteredProviders.length} matches)`}
+                {activeTab === 'products' && `Safety Gear & Grab Bars (${filteredProducts.length} matching)`}
+                {activeTab === 'saved' && `Bookmarked Resources (${savedItems.length} items)`}
+              </h3>
+              
+              {/* Mobile list vs map toggle (Zillow style) */}
+              {activeTab === 'local' && (
+                <div className="flex md:hidden bg-muted/50 p-1 rounded-xl">
+                  <button
+                    id="mobile-view-toggle-list"
+                    onClick={() => setMobileViewMode('list')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      mobileViewMode === 'list' 
+                        ? 'bg-background text-foreground shadow-sm' 
+                        : 'text-muted-foreground'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" /> List
+                  </button>
+                  <button
+                    id="mobile-view-toggle-map"
+                    onClick={() => setMobileViewMode('map')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      mobileViewMode === 'map' 
+                        ? 'bg-background text-foreground shadow-sm' 
+                        : 'text-muted-foreground'
+                    }`}
+                  >
+                    <Navigation className="w-3.5 h-3.5" /> Map
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {activeTab !== 'saved' && (
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+                {AVAILABLE_CATEGORIES.map(catName => {
+                  const isSelected = selectedCategory === catName;
+                  return (
                     <button
-                      key={cat.name}
-                      onClick={() => {
-                        setActiveCategory(cat.name);
-                        toast.info(`Filtering directory for ${cat.name}`);
-                      }}
-                      className={`px-3 py-1 rounded-full text-xs font-bold border shrink-0 transition-all ${
-                        activeCategory === cat.name
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-card border-border/50 text-muted-foreground hover:text-foreground"
+                      key={catName}
+                      id={`category-badge-${catName}`}
+                      onClick={() => setSelectedCategory(catName)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors ${
+                        isSelected 
+                          ? 'bg-foreground text-background border-foreground shadow-sm' 
+                          : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
                       }`}
                     >
-                      {cat.name}
+                      {catName}
                     </button>
-                  ))}
-                </div>
-
-                {/* Keyword Search Input */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search store names or specialties (e.g. grab bars, paint, HVAC)..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 bg-background/50 border-border/60 text-xs"
-                  />
-                </div>
-
-                {/* Businesses Cards List Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {isOverpassLoading ? (
-                    Array.from({ length: 4 }).map((_, i) => (
-                      <Card key={i} className="animate-pulse bg-muted/10 h-[240px] border border-border/30 rounded-xl" />
-                    ))
-                  ) : filteredBusinesses.map((biz) => {
-                    const isSaved = savedIds.includes(biz.id);
-                    const isCompared = comparedBusinessIds.includes(biz.id);
-                    const isSelected = selectedBusinessId === biz.id;
-
-                    return (
-                      <Card
-                        key={biz.id}
-                        id={`biz-card-${biz.id}`}
-                        className={`flex flex-col border border-border/60 overflow-hidden rounded-xl hover:shadow-md transition-all relative ${
-                          isSelected ? "ring-2 ring-primary border-primary bg-primary/[0.01]" : ""
-                        }`}
-                      >
-                        <div className="p-4 pb-2">
-                          <div className="flex justify-between items-start gap-2">
-                            {/* Match compatibility Score */}
-                            <Badge className="bg-primary hover:bg-primary text-white border-none py-1 px-2 rounded font-bold flex items-center gap-1 shrink-0 text-xs shadow-sm">
-                              <Sparkles className="h-3 w-3 text-yellow-300 fill-yellow-300" />
-                              {biz.aiScore}% Match
-                            </Badge>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => toggleComparison(biz.id)}
-                                className={`h-8 w-8 p-0 border transition-all ${
-                                  isCompared ? "border-primary/50 text-primary bg-primary/5" : "border-border/30 text-muted-foreground"
-                                }`}
-                                title="Compare Side-by-Side"
-                              >
-                                <Scale className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => toggleSaveBusiness(biz)}
-                                className={`h-8 w-8 p-0 border transition-all ${
-                                  isSaved ? "border-red-200 text-red-500 bg-red-50/50" : "border-border/30 text-muted-foreground"
-                                }`}
-                              >
-                                <Heart className={`h-4 w-4 ${isSaved ? "fill-red-500 text-red-500" : ""}`} />
-                              </Button>
-                            </div>
-                          </div>
-
-                          {/* Specialties chips */}
-                          <div className="flex flex-wrap gap-1 mt-2.5">
-                            {biz.categories.slice(0, 3).map((catName) => (
-                              <span
-                                key={catName}
-                                className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                                  CATEGORY_COLORS[catName] || "bg-muted border-border text-muted-foreground"
-                                }`}
-                              >
-                                {catName}
-                              </span>
-                            ))}
-                          </div>
-
-                          <h3
-                            onClick={() => {
-                              setSelectedBusinessId(biz.id);
-                              setMapCenter({ lat: biz.lat, lng: biz.lng });
-                              setMapZoom(15);
-                              toast.info(`Centered map view on ${biz.name}`);
-                            }}
-                            className="font-extrabold text-base mt-2 hover:text-primary transition-colors cursor-pointer leading-tight"
-                          >
-                            {biz.name}
-                          </h3>
-
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">
-                            <div className="flex items-center text-amber-500 font-bold">
-                              <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500 mr-0.5" />
-                              {biz.rating}
-                            </div>
-                            <span>({biz.reviewsCount} reviews)</span>
-                            <span className="font-semibold text-primary">
-                              {roadDistances[biz.id] 
-                                ? `${roadDistances[biz.id].toFixed(1)} mi` 
-                                : `${biz.distance.toFixed(1)} mi`}
-                            </span>
-                          </div>
-                        </div>
-
-                        <CardContent className="p-4 pt-1 flex-1 space-y-3">
-                          {/* Explain the specific Match reason */}
-                          <div className="p-2.5 rounded bg-primary/5 border border-primary/10 text-xs">
-                            <span className="text-[8px] font-extrabold text-primary uppercase tracking-widest block mb-0.5 flex items-center gap-1">
-                              <Sparkles className="h-2.5 w-2.5" /> Match Explanation
-                            </span>
-                            <p className="text-muted-foreground italic leading-relaxed">
-                              "{biz.aiExplanation}"
-                            </p>
-                          </div>
-
-                          {/* Contact Details */}
-                          <div className="text-xs space-y-1 text-muted-foreground font-medium">
-                            <div className="flex items-center gap-1.5">
-                              <MapPin className="h-3.5 w-3.5" />
-                              <span className="line-clamp-1">{biz.address}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="h-3.5 w-3.5" />
-                              <span>{biz.phone}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-1">
-                            {biz.specialties.slice(0, 2).map((sp, i) => (
-                              <Badge key={i} variant="secondary" className="text-[9px] bg-muted text-muted-foreground font-semibold px-2 py-0">
-                                ✓ {sp}
-                              </Badge>
-                            ))}
-                          </div>
-                        </CardContent>
-
-                        <CardFooter className="p-4 pt-2 border-t border-border/40 bg-muted/10 grid grid-cols-2 gap-2 mt-auto">
-                          <Button variant="outline" size="sm" className="text-xs h-8 border-border/40 font-bold" asChild>
-                            <a href={biz.website} target="_blank" rel="noopener noreferrer">
-                              <Globe className="h-3.5 w-3.5 text-muted-foreground" /> Website
-                            </a>
-                          </Button>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.address)}`, "_blank")}
-                            className="text-xs h-8 font-bold gap-1"
-                          >
-                            <Navigation className="h-3.5 w-3.5" /> Directions
-                          </Button>
-                        </CardFooter>
-                      </Card>
-                    );
-                  })}
-
-                  {filteredBusinesses.length === 0 && (
-                    <div className="col-span-full text-center py-12 bg-muted/10 rounded-xl border border-dashed border-border/50">
-                      <AlertTriangle className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                      <h4 className="font-bold text-sm">No Matching Safety Resources Found</h4>
-                      <p className="text-muted-foreground max-w-sm mx-auto text-xs mt-1">
-                        Try loosening your compatibility score, expanding the search radius, or selecting a different room scan above.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === "shopping" && (
-              <motion.div
-                key="shopping-tab"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-4"
-              >
-                <Card className="border border-primary/20 bg-primary/[0.01]">
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-sm font-extrabold flex items-center gap-1.5">
-                      <ShoppingBag className="h-4.5 w-4.5 text-primary" /> Renovations Shopping Guide Checklist
-                    </CardTitle>
-                    <CardDescription className="text-xs leading-relaxed">
-                      This smart helper automatically translates the recommendations from your linked room scan report into a shopping checklist. Items are linked directly to nearby home centers.
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-
-                <div className="space-y-3">
-                  {shoppingList.map((item) => {
-                    const isChecked = checkedItems.includes(item.id);
-                    return (
-                      <Card 
-                        key={item.id} 
-                        className={`border transition-all rounded-xl ${
-                          isChecked ? "bg-muted/10 border-muted opacity-75" : "border-border/50 hover:border-primary/30"
-                        }`}
-                      >
-                        <CardContent className="p-4 flex items-start gap-3 justify-between">
-                          <div className="flex items-start gap-2.5">
-                            <button
-                              onClick={() => toggleCheckItem(item.id)}
-                              className={`mt-1 h-5 w-5 rounded border flex items-center justify-center transition-all shrink-0 ${
-                                isChecked 
-                                  ? "bg-emerald-500 border-emerald-500 text-white" 
-                                  : "border-border hover:border-primary bg-background"
-                              }`}
-                            >
-                              {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
-                            </button>
-
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <Badge variant="outline" className="bg-muted text-muted-foreground text-[8px] font-extrabold uppercase px-1.5 py-0">
-                                  {item.category}
-                                </Badge>
-                                <span className="text-[9px] text-primary font-bold">Room: {item.roomSource}</span>
-                              </div>
-                              <h4 className={`font-bold text-sm ${isChecked ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                                {item.name}
-                              </h4>
-                              <p className="text-xs text-muted-foreground leading-normal">{item.description}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col gap-1 text-right shrink-0 min-w-[120px] self-center">
-                            <span className="text-[8px] font-extrabold text-muted-foreground uppercase tracking-widest block">Available Nearby At:</span>
-                            <div className="flex flex-wrap gap-1 justify-end">
-                              {item.stores.map((st) => (
-                                <button
-                                  key={st}
-                                  onClick={() => {
-                                    setActiveTab("search");
-                                    setSearchQuery(st);
-                                    setActiveCategory("All");
-                                    toast.info(`Filtering professional list for: ${st}`);
-                                  }}
-                                  className="px-1.5 py-0.5 rounded border border-border/40 bg-card text-[9px] font-bold text-muted-foreground hover:bg-primary/5 hover:border-primary hover:text-primary transition-all text-left"
-                                >
-                                  {st}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-
-                  {shoppingList.length === 0 && (
-                    <div className="text-center py-12 bg-muted/10 rounded-xl border border-dashed border-border/50">
-                      <ShoppingBag className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                      <h4 className="font-bold text-sm">Shopping Checklist Empty</h4>
-                      <p className="text-muted-foreground text-xs max-w-sm mx-auto mt-1">
-                        Select an active scan with recommendations at the top to build your checklist!
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === "saved" && (
-              <motion.div
-                key="saved-tab"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="grid grid-cols-1 md:grid-cols-2 gap-4"
-              >
-                {savedResources.map((item) => {
-                  const biz = item.businessData;
-                  return (
-                    <Card key={biz.id} className="flex flex-col border border-border/50 overflow-hidden rounded-xl">
-                      <div className="p-4 pb-2">
-                        <div className="flex justify-between items-start gap-2">
-                          <Badge className="bg-primary text-white border-none py-1 px-1.5 rounded font-extrabold text-[10px]">
-                            ★ {biz.rating}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleSaveBusiness(biz)}
-                            className="h-8 w-8 p-0 border border-red-200 text-red-500 bg-red-50/50"
-                          >
-                            <Heart className="h-4 w-4 fill-red-500 text-red-500" />
-                          </Button>
-                        </div>
-                        <h3 className="font-extrabold text-base mt-2 leading-tight">{biz.name}</h3>
-                        <p className="text-[10px] text-muted-foreground font-semibold">Saved for: {item.relatedProject || "Home Project"}</p>
-                      </div>
-
-                      <CardContent className="p-4 pt-1 flex-1 text-xs text-muted-foreground space-y-2">
-                        <p className="italic bg-muted/40 p-2 rounded border border-border/30">
-                          "{biz.aiExplanation}"
-                        </p>
-                        <div className="space-y-1 font-medium pt-1">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5" />
-                            <span>{biz.address}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="h-3.5 w-3.5" />
-                            <span>{biz.phone}</span>
-                          </div>
-                        </div>
-                      </CardContent>
-
-                      <CardFooter className="p-4 pt-2 border-t border-border/40 bg-muted/10 grid grid-cols-2 gap-2 mt-auto">
-                        <Button variant="outline" size="sm" className="text-xs h-8 border-border/40 font-bold" asChild>
-                          <a href={biz.website} target="_blank" rel="noopener noreferrer">Website</a>
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(biz.address)}`, "_blank")}
-                          className="text-xs h-8 font-bold gap-1"
-                        >
-                          <Navigation className="h-3.5 w-3.5" /> Navigation
-                        </Button>
-                      </CardFooter>
-                    </Card>
                   );
                 })}
-
-                {savedResources.length === 0 && (
-                  <div className="col-span-full text-center py-16 bg-muted/10 rounded-xl border border-dashed border-border/50">
-                    <Heart className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                    <h4 className="font-bold text-sm">No Saved Favorites Yet</h4>
-                    <p className="text-muted-foreground max-w-sm mx-auto text-xs mt-1">
-                      Click the heart button on professional listings to save them here for quick offline access during your renovation work.
-                    </p>
-                  </div>
-                )}
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
-        </div>
+          </div>
 
-        {/* Right Section: Interactive Leaflet.js Map Mapnik layer & Side-by-Side Comparison */}
-        <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6 space-y-6">
-          <Card className="border border-border/60 shadow-sm overflow-hidden flex flex-col bg-card">
-            <div className="p-3 bg-muted/35 border-b border-border/40 flex items-center justify-between text-[11px] font-bold">
-              <span className="flex items-center gap-1.5 text-foreground">
-                <MapPin className="h-4 w-4 text-primary" />
-                Interactive Live Map (Leaflet.js)
-              </span>
-              <span className="text-emerald-600 text-[9px] uppercase tracking-wider">
-                ● Connected
-              </span>
-            </div>
-
-            {/* Actual Leaflet Map element */}
-            <div className="w-full h-[400px] bg-muted/10 relative z-0">
-              <div ref={mapRef} className="w-full h-full" />
-            </div>
-
-            <div className="p-3 bg-slate-950 text-white text-[11px] leading-relaxed border-t border-slate-900 space-y-1.5">
-              <div className="font-black text-primary flex items-center gap-1">
-                <Globe className="h-3.5 w-3.5 text-sky-400" /> OpenStreetMap Free Mode
-              </div>
-              <p className="text-slate-300">
-                Displaying local suppliers and contractors centered on <span className="text-white font-extrabold">{locationSearch}</span>. Click on any marker to select and inspect card details.
-              </p>
-            </div>
-          </Card>
-
-          {/* Quick-Comparison Drawer */}
-          {comparedBusinessIds.length > 0 && (
-            <Card className="border border-primary/20 bg-primary/[0.01] shadow-sm rounded-xl">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Compare Directory ({comparedBusinessIds.length})</span>
-                  <button
-                    onClick={() => setComparedBusinessIds([])}
-                    className="text-[11px] text-muted-foreground hover:text-foreground font-bold"
-                  >
-                    Clear All
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {comparedBusinessIds.map(id => {
-                    const biz = processedBusinesses.find(b => b.id === id);
-                    if (!biz) return null;
-                    return (
-                      <div key={id} className="flex justify-between items-center p-2 rounded bg-card border border-border/40 text-xs font-semibold">
-                        <span className="line-clamp-1 flex-1 pr-2">{biz.name}</span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Badge variant="secondary" className="px-1.5 py-0 text-[8px] bg-primary/10 text-primary">
-                            {biz.aiScore}% Match
-                          </Badge>
-                          <button
-                            onClick={() => toggleComparison(id)}
-                            className="text-muted-foreground hover:text-red-500"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+          {/* Core Visual Area */}
+          <div className="flex-1 relative overflow-hidden min-h-[500px]">
+            <AnimatePresence mode="wait">
+              
+              {/* Tab: Local Professionals */}
+              {activeTab === 'local' && (
+                <motion.div 
+                  key="local-tab"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 flex h-full"
+                >
+                  
+                  {/* Left panel: List View of businesses */}
+                  <div className={`w-full md:w-1/2 h-full overflow-y-auto p-6 space-y-4 border-r border-border/40 ${
+                    mobileViewMode === 'list' ? 'block' : 'hidden md:block'
+                  }`}>
+                    {isLoading ? (
+                      <div className="flex flex-col items-center justify-center py-24 h-full">
+                        <RefreshCw className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+                        <p className="text-xs text-neutral-500 animate-pulse text-center leading-relaxed">
+                          Synchronizing with Yelp Fusion & calculating driving routes via OSRM...
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
+                    ) : filteredProviders.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-20 text-center text-neutral-400 space-y-2">
+                        <ShoppingBag className="w-10 h-10 opacity-40" />
+                        <p className="text-sm">No local specialists found matching your filter criteria.</p>
+                        <Button id="reset-filters-btn" variant="outline" className="text-xs font-semibold" onClick={() => {
+                          setMinRating(0);
+                          setPriceLevel(null);
+                          setOpenNow(false);
+                          setEcoFriendlyOnly(false);
+                          setFastestAvailabilityOnly(false);
+                          setSelectedCategory("All");
+                          setSearchQuery("");
+                          setSearchRadius(15);
+                        }}>Reset Filters</Button>
+                      </div>
+                    ) : (
+                      filteredProviders.map(prov => {
+                        const isSaved = savedItems.some(
+                          saved => saved.type === 'provider' && saved.resourceId === prov.id
+                        );
+                        const isSelected = selectedProviderId === prov.id;
+                        return (
+                          <div 
+                            key={prov.id} 
+                            id={`provider-card-${prov.id}`}
+                            onClick={() => setSelectedProviderId(prov.id)}
+                            className={`p-5 rounded-2xl transition-all border cursor-pointer flex flex-col justify-between group gap-4 ${
+                              isSelected 
+                                ? 'bg-foreground/5 border-foreground/10 shadow-sm' 
+                                : 'bg-background border-border/50 hover:border-border hover:shadow-sm'
+                            }`}
+                          >
+                            <div className="flex gap-4">
+                              <img 
+                                referrerPolicy="no-referrer"
+                                src={getBusinessPhoto(prov)} 
+                                className="w-16 h-16 object-cover rounded-xl border border-border/50 shrink-0"
+                                alt={prov.name} 
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start gap-2">
+                                  <h4 className="font-medium text-sm text-foreground group-hover:text-muted-foreground transition-colors leading-snug">
+                                    {prov.name}
+                                  </h4>
+                                  <button
+                                    id={`bookmark-btn-${prov.id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleSave(prov, 'provider');
+                                    }}
+                                    className="text-muted-foreground hover:text-red-500 transition-colors p-1 shrink-0"
+                                  >
+                                    <Heart className={`w-4 h-4 ${isSaved ? 'fill-red-500 text-red-500' : ''}`} />
+                                  </button>
+                                </div>
 
-                <Button
-                  onClick={() => setShowComparison(true)}
-                  className="w-full text-xs font-bold h-9"
-                >
-                  <Scale className="mr-1.5 h-4 w-4" /> Compare Side-by-Side
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                  <Badge className="bg-foreground text-background border-transparent text-[9px] px-1.5 py-0 flex items-center gap-0.5 font-medium" variant="outline">
+                                    <Sparkles className="w-2.5 h-2.5" />
+                                    {prov.matchScore}% Match
+                                  </Badge>
+                                  {prov.openHours && prov.openHours !== "Closed" ? (
+                                    <Badge className="bg-success/10 text-success border-transparent text-[9px] px-1.5 py-0" variant="outline">Open Now</Badge>
+                                  ) : (
+                                    <Badge className="bg-destructive/10 text-destructive border-transparent text-[9px] px-1.5 py-0" variant="outline">Closed</Badge>
+                                  )}
+                                  <span className="text-[11px] font-medium text-muted-foreground">
+                                    {prov.categories[0] || "Specialist"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
 
-      {/* Side-by-Side Comparison Modal Overlay */}
-      <AnimatePresence>
-        {showComparison && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border border-border w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
-            >
-              <div className="p-4 sm:p-5 border-b border-border/50 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Scale className="h-5 w-5 text-primary" />
-                  <h3 className="text-base font-extrabold">Professional Contractor Comparison</h3>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowComparison(false)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
+                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                              {prov.specialties.join(" • ")}
+                            </p>
 
-              <div className="p-4 sm:p-6 overflow-y-auto flex-1 scrollbar-thin">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-stretch divide-y md:divide-y-0 md:divide-x divide-border">
-                  {/* Category names on Desktop */}
-                  <div className="hidden md:flex flex-col justify-between text-xs text-muted-foreground font-bold py-2 space-y-4 pr-3">
-                    <div className="h-14 flex items-end">Professional</div>
-                    <div>AI Compatibility</div>
-                    <div>Local Ratings</div>
-                    <div>Distance</div>
-                    <div>Pricing Level</div>
-                    <div>Phone Contact</div>
-                    <div>Key Specialties</div>
-                    <div className="h-10">Website</div>
+                            {prov.address && (
+                              <div className="flex items-center text-[11px] font-medium text-muted-foreground gap-1.5 mt-1 bg-muted/30 px-2.5 py-1.5 rounded-lg border border-border/50">
+                                <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
+                                <span className="truncate" title={prov.address}>{prov.address}</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-xs pt-3 border-t border-border/40 mt-1">
+                              <div className="flex items-center gap-2">
+                                <span className="flex items-center text-foreground font-medium text-[11px]">
+                                  <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {prov.rating}
+                                </span>
+                                <span className="text-muted-foreground text-[10px]">({prov.reviewsCount} reviews)</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 font-medium text-foreground">
+                                <span className="flex items-center text-[10px] bg-muted/50 border border-border/50 px-2 py-1 rounded-md gap-1">
+                                  <Car className="w-3 h-3 text-muted-foreground" />
+                                  {prov.distance.toFixed(1)} mi
+                                </span>
+                                <span className="flex items-center text-[10px] bg-muted/50 border border-border/50 px-2 py-1 rounded-md gap-1">
+                                  <Clock className="w-3 h-3 text-muted-foreground" />
+                                  {prov.driveTime} min
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
 
-                  {/* Compared Business items */}
-                  {comparedBusinessIds.map(id => {
-                    const biz = processedBusinesses.find(b => b.id === id);
-                    if (!biz) return null;
-                    return (
-                      <div key={id} className="flex flex-col justify-between space-y-4 py-2 px-2 md:col-span-1 text-center md:text-left">
-                        <div className="h-14 flex flex-col justify-end">
-                          <h4 className="font-extrabold text-xs line-clamp-2 leading-tight">{biz.name}</h4>
-                          <span className="text-[9px] font-bold text-muted-foreground mt-0.5">{biz.categories[0]}</span>
-                        </div>
+                  {/* Right panel: Live interactive OpenStreetMap via Leaflet container */}
+                  <div className={`w-full md:w-1/2 h-full bg-muted/10 relative ${
+                    mobileViewMode === 'map' ? 'block' : 'hidden md:block'
+                  }`}>
+                    <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-                        <div>
-                          <span className="text-[9px] font-extrabold text-muted-foreground uppercase md:hidden block">AI Compatibility</span>
-                          <Badge className="bg-primary text-white text-[10px] font-extrabold">
-                            {biz.aiScore}% Match
-                          </Badge>
-                        </div>
-
-                        <div>
-                          <span className="text-[9px] font-extrabold text-muted-foreground uppercase md:hidden block">Local Ratings</span>
-                          <div className="flex items-center justify-center md:justify-start gap-1 font-bold text-xs text-amber-500">
-                            <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-                            {biz.rating} <span className="text-muted-foreground font-normal">({biz.reviewsCount})</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <span className="text-[9px] font-extrabold text-muted-foreground uppercase md:hidden block">Distance</span>
-                          <span className="text-xs font-bold text-foreground">
-                            {roadDistances[biz.id] 
-                              ? `${roadDistances[biz.id].toFixed(1)} mi` 
-                              : `${biz.distance.toFixed(1)} mi`}
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-[9px] font-extrabold text-muted-foreground uppercase md:hidden block">Pricing Level</span>
-                          <div className="flex justify-center md:justify-start text-emerald-600 font-bold text-xs">
-                            {"$".repeat(biz.priceLevel)}
-                          </div>
-                        </div>
-
-                        <div>
-                          <span className="text-[9px] font-extrabold text-muted-foreground uppercase md:hidden block">Phone Contact</span>
-                          <span className="text-xs font-semibold text-foreground">{biz.phone}</span>
-                        </div>
-
-                        <div>
-                          <span className="text-[9px] font-extrabold text-muted-foreground uppercase md:hidden block">Key Specialties</span>
-                          <div className="flex flex-wrap justify-center md:justify-start gap-1">
-                            {biz.specialties.slice(0, 2).map((sp, i) => (
-                              <Badge key={i} variant="secondary" className="text-[8px] px-1.5 font-bold">
-                                {sp}
+                    {/* Quick Selected Provider Popover panel exactly like Airbnb */}
+                    {selectedProvider && (
+                      <div className="absolute bottom-6 left-4 right-4 bg-background/95 backdrop-blur-md p-4 rounded-2xl border border-border/50 shadow-xl space-y-3 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="flex gap-3">
+                            <img 
+                              referrerPolicy="no-referrer"
+                              src={getBusinessPhoto(selectedProvider)} 
+                              className="w-12 h-12 object-cover rounded-xl border border-border/50" 
+                              alt={selectedProvider.name} 
+                            />
+                            <div>
+                              <Badge className="bg-foreground/5 text-foreground border-border/50 text-[9px] px-1.5 py-0 font-medium" variant="outline">
+                                {selectedProvider.matchScore}% Match
                               </Badge>
-                            ))}
+                              <h4 className="font-medium text-sm mt-1.5 text-foreground line-clamp-1">{selectedProvider.name}</h4>
+                              <p className="text-[10px] text-muted-foreground flex items-center mt-1">
+                                <MapPin className="w-3 h-3 mr-0.5 text-muted-foreground shrink-0" /> <span className="line-clamp-1" title={selectedProvider.address}>{selectedProvider.address}</span>
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right shrink-0">
+                            <span className="text-xs font-medium text-foreground flex items-center justify-end">
+                              <Star className="w-3 h-3 mr-1 fill-current" /> {selectedProvider.rating}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-medium block mt-1">{selectedProvider.distance.toFixed(1)} miles away</span>
                           </div>
                         </div>
 
-                        <div className="pt-2">
-                          <Button variant="outline" size="sm" className="w-full text-xs font-bold" asChild>
-                            <a href={biz.website} target="_blank" rel="noopener noreferrer">
-                              <Globe className="mr-1 h-3.5 w-3.5" /> Visit Site
+                        <div className="flex gap-2 pt-2 border-t border-border/40 mt-2">
+                          <a 
+                            href={`tel:${selectedProvider.phone}`}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-foreground text-background font-medium text-xs hover:opacity-90 active:scale-95 transition-all"
+                          >
+                            <Phone className="w-3.5 h-3.5" /> Call
+                          </a>
+                          {selectedProvider.website && (
+                            <a 
+                              href={selectedProvider.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="h-9 w-12 flex items-center justify-center rounded-lg border border-border/50 text-muted-foreground hover:bg-muted/50 hover:text-foreground active:scale-95 transition-all"
+                            >
+                              <ExternalLink className="w-4 h-4" />
                             </a>
-                          </Button>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
 
-                  {Array.from({ length: Math.max(0, 3 - comparedBusinessIds.length) }).map((_, idx) => (
-                    <div key={idx} className="hidden md:flex flex-col items-center justify-center text-muted-foreground/30 text-xs py-10 border-dashed border-2 border-border/40 rounded-xl m-2">
-                      <Plus className="h-6 w-6 stroke-[1.5] mb-1.5" />
-                      <span>Select to Compare</span>
+                </motion.div>
+              )}
+
+
+
+              {/* Tab: Bookmarked Saved Favorites */}
+              {activeTab === 'saved' && (
+                <motion.div 
+                  key="saved-tab"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 p-6 overflow-y-auto space-y-6"
+                >
+                  {savedItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center text-center py-20">
+                      <Heart className="w-12 h-12 text-neutral-200 dark:text-neutral-800 mb-3 animate-pulse" />
+                      <h3 className="text-base font-bold text-neutral-700 dark:text-neutral-300">No bookmarks yet</h3>
+                      <p className="text-xs text-neutral-400 max-w-xs mt-1">
+                        Save helpful local specialists and recommended products to review or contact them later.
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  ) : (
+                    <div className="space-y-6">
+                      
+                      {/* Saved Local Specialists */}
+                      {savedItems.some(i => i.type === 'provider') && (
+                        <div className="space-y-4">
+                          <h4 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                            <MapPin className="w-3.5 h-3.5" /> Saved Specialists
+                          </h4>
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {savedItems
+                              .filter(i => i.type === 'provider')
+                              .map(item => {
+                                const prov = item.resourceData;
+                                return (
+                                  <div key={item.firestoreId} className="p-5 rounded-2xl bg-card border border-border/50 flex flex-col justify-between gap-3 shadow-sm hover:border-border transition-colors">
+                                    <div className="flex justify-between items-start gap-3">
+                                      <h4 className="font-medium text-sm text-foreground leading-tight">{prov.name}</h4>
+                                      <button 
+                                        id={`unsave-prov-${item.firestoreId}`}
+                                        onClick={() => handleToggleSave(prov, 'provider')}
+                                        className="text-muted-foreground hover:text-red-500 transition-colors p-1 shrink-0"
+                                      >
+                                        <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+                                      </button>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground line-clamp-2">{prov.specialties?.join(" • ")}</p>
+                                    
+                                    {prov.address && (
+                                      <div className="flex items-center text-[11px] font-medium text-muted-foreground gap-1.5 mt-1 bg-muted/30 px-2 py-1.5 rounded-lg border border-border/50">
+                                        <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
+                                        <span className="truncate" title={prov.address}>{prov.address}</span>
+                                      </div>
+                                    )}
+                                    
+                                    <div className="flex items-center justify-between text-xs pt-3 border-t border-border/40 mt-1">
+                                      <span className="flex items-center text-foreground font-medium text-[11px]">
+                                        <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {prov.rating}
+                                      </span>
+                                      <a href={`tel:${prov.phone}`} className="text-foreground font-medium text-[11px] flex items-center gap-1.5 hover:underline">
+                                        <Phone className="w-3 h-3" /> Call
+                                      </a>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
 
-              <div className="p-4 border-t border-border/50 bg-muted/20 flex justify-end gap-2.5">
-                <Button variant="outline" size="sm" className="font-bold text-xs" onClick={() => setComparedBusinessIds([])}>
-                  Clear Selection
-                </Button>
-                <Button size="sm" className="font-bold text-xs" onClick={() => setShowComparison(false)}>
-                  Close Comparison
-                </Button>
-              </div>
-            </motion.div>
+
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+            </AnimatePresence>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+
+      </div>
     </div>
   );
 }

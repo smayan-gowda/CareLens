@@ -4,13 +4,37 @@ import { extractHazards } from './safetyAnalyzer';
 import { generateRecommendations } from './recommendationGenerator';
 
 async function getBase64FromUrl(url: string): Promise<string> {
-  const response = await fetch(url);
-  const blob = await response.blob();
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      
+      const MAX_SIZE = 1000;
+      if (width > height) {
+        if (width > MAX_SIZE) {
+          height *= MAX_SIZE / width;
+          width = MAX_SIZE;
+        }
+      } else {
+        if (height > MAX_SIZE) {
+          width *= MAX_SIZE / height;
+          height = MAX_SIZE;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('Canvas context not found'));
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = reject;
+    img.src = url;
   });
 }
 

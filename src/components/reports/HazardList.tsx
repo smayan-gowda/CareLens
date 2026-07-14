@@ -10,9 +10,97 @@ interface HazardListProps {
   hazards: Hazard[];
   selectedHazardId: string | null;
   onSelectHazard: (id: string | null) => void;
+  recommendations?: any[];
 }
 
-export function HazardList({ hazards, selectedHazardId, onSelectHazard }: HazardListProps) {
+const getHazardCostAndDifficulty = (hazard: Hazard, recommendations?: any[]) => {
+  // Try to find matching recommendation
+  const matchedRec = recommendations?.find(rec => 
+    rec.hazardId === hazard.id || 
+    rec.id === `rec-${hazard.id}` ||
+    (rec.relatedHazardIds && rec.relatedHazardIds.includes(hazard.id)) ||
+    rec.title?.toLowerCase().includes(hazard.title?.toLowerCase()) ||
+    hazard.title?.toLowerCase().includes(rec.title?.toLowerCase())
+  );
+
+  if (matchedRec) {
+    let diff = matchedRec.difficulty || "Medium";
+    if (diff === 'Easy') diff = 'Easy (DIY)';
+    else if (diff === 'Medium') diff = 'Moderate (DIY/Pro)';
+    else if (diff === 'Hard') diff = 'Hard (Professional)';
+    return {
+      cost: matchedRec.estimatedCost || "$50 - $150",
+      difficulty: diff
+    };
+  }
+
+  // Fallback estimates based on Category and Severity
+  const cat = hazard.category || "";
+  const sev = hazard.severity || "Medium";
+
+  let cost = "$50 - $150";
+  let difficulty = "Easy (DIY)";
+
+  if (cat.includes("Fall Risk") || cat.includes("Slip")) {
+    if (sev === "Critical" || sev === "High") {
+      cost = "$150 - $450";
+      difficulty = "Moderate (DIY/Pro)";
+    } else {
+      cost = "$50 - $150";
+      difficulty = "Easy (DIY)";
+    }
+  } else if (cat.includes("Trip") || cat.includes("Obstacle") || cat.includes("Floor")) {
+    if (sev === "Critical" || sev === "High") {
+      cost = "$100 - $300";
+      difficulty = "Moderate (DIY/Pro)";
+    } else {
+      cost = "$20 - $80";
+      difficulty = "Easy (DIY)";
+    }
+  } else if (cat.includes("Accessibility")) {
+    if (sev === "Critical" || sev === "High") {
+      cost = "$800 - $3,500";
+      difficulty = "Hard (Professional)";
+    } else {
+      cost = "$150 - $500";
+      difficulty = "Moderate (DIY/Pro)";
+    }
+  } else if (cat.includes("Lighting")) {
+    cost = "$30 - $120";
+    difficulty = "Easy (DIY)";
+  } else if (cat.includes("Fire") || cat.includes("Smoke")) {
+    cost = "$40 - $150";
+    difficulty = "Easy (DIY)";
+  } else if (cat.includes("Exit") || cat.includes("Blocked")) {
+    cost = "$0 (Rearrange space)";
+    difficulty = "Easy (DIY)";
+  } else if (cat.includes("Furniture")) {
+    cost = "$50 - $250";
+    difficulty = "Easy (DIY)";
+  } else if (cat.includes("Equipment") || cat.includes("Grab Bar")) {
+    cost = "$120 - $300";
+    difficulty = "Moderate (DIY/Pro)";
+  } else if (cat.includes("Clutter")) {
+    cost = "$0 (De-clutter)";
+    difficulty = "Easy (DIY)";
+  } else if (cat.includes("Electrical")) {
+    cost = "$100 - $250";
+    difficulty = "Moderate (DIY/Pro)";
+  } else if (cat.includes("Sharp")) {
+    cost = "$15 - $50";
+    difficulty = "Easy (DIY)";
+  } else if (cat.includes("Water")) {
+    cost = "$80 - $250";
+    difficulty = "Moderate (DIY/Pro)";
+  } else if (cat.includes("Structural")) {
+    cost = "$1,000 - $5,000+";
+    difficulty = "Hard (Professional)";
+  }
+
+  return { cost, difficulty };
+};
+
+export function HazardList({ hazards, selectedHazardId, onSelectHazard, recommendations }: HazardListProps) {
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'Critical': return 'border-red-500 bg-red-500/10 text-red-500';
@@ -44,6 +132,7 @@ export function HazardList({ hazards, selectedHazardId, onSelectHazard }: Hazard
       ) : (
         hazards.map(hazard => {
           const isExpanded = selectedHazardId === hazard.id;
+          const { cost, difficulty } = getHazardCostAndDifficulty(hazard, recommendations);
           return (
             <motion.div 
               key={hazard.id}
@@ -113,14 +202,14 @@ export function HazardList({ hazards, selectedHazardId, onSelectHazard }: Hazard
                                   <DollarSign className="h-3.5 w-3.5" />
                                   <span className="text-xs font-medium uppercase">Est. Cost</span>
                                 </div>
-                                <span className="text-sm font-semibold">$50 - $150</span>
+                                <span className="text-sm font-semibold">{cost}</span>
                               </div>
                               <div className="bg-muted/30 p-3 rounded-lg border border-border/50">
                                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                                   <Wrench className="h-3.5 w-3.5" />
                                   <span className="text-xs font-medium uppercase">Difficulty</span>
                                 </div>
-                                <span className="text-sm font-semibold">Easy (DIY)</span>
+                                <span className="text-sm font-semibold">{difficulty}</span>
                               </div>
                             </div>
 

@@ -1,18 +1,18 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Plus, Home, MapPin, Search } from "lucide-react";
-import { useHomeStore } from "@/stores/useHomeStore";
-import { Link } from "react-router-dom";
-import { Input } from "@/components/ui/input";
 import { useState } from "react";
+import { motion } from "motion/react";
+import { Button } from "@/components/ui/button";
+import { Plus, Home, MapPin, Search, ChevronRight } from "lucide-react";
+import { useHomeStore } from "@/stores/useHomeStore";
+import { Link, useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
 
 export function HomesPage() {
   const { homes, hiddenHomes } = useHomeStore();
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
 
   const visibleHomes = homes.filter(h => !hiddenHomes.includes(h.id));
+  
   const filteredHomes = visibleHomes.filter(h => 
     h.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     h.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -20,114 +20,107 @@ export function HomesPage() {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="max-w-5xl mx-auto space-y-12 pb-12">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">My Homes</h1>
-          <p className="text-muted-foreground mt-1">Manage the properties you are monitoring.</p>
+          <h1 className="text-4xl font-medium tracking-tight mb-2">Properties</h1>
+          <p className="text-neutral-500 text-lg font-light">Manage and monitor the spaces you care about.</p>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400" />
             <Input 
-              placeholder="Search homes..." 
-              className="pl-9 bg-background" 
+              placeholder="Search properties..." 
+              className="pl-10 h-12 rounded-full bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 focus-visible:ring-black dark:focus-visible:ring-white shadow-sm" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button asChild className="shrink-0">
-            <Link to="/homes/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Home
-            </Link>
+          <Button 
+            onClick={() => navigate('/properties/new')}
+            className="rounded-full bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 h-12 px-6 shrink-0 shadow-md transition-transform hover:scale-105"
+          >
+            <Plus className="w-5 h-5 mr-2" /> Add Property
           </Button>
         </div>
       </div>
 
       {visibleHomes.length === 0 ? (
-        <div className="border-dashed border-2 rounded-2xl flex flex-col items-center justify-center p-12 text-center text-muted-foreground min-h-[400px]">
-          <div className="h-20 w-20 bg-primary/5 rounded-full flex items-center justify-center mb-6">
-            <Home className="h-10 w-10 text-primary/40" />
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-neutral-900 rounded-3xl p-16 text-center border border-neutral-200 dark:border-neutral-800 shadow-sm"
+        >
+          <div className="w-24 h-24 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Home className="w-10 h-10 text-neutral-400" />
           </div>
-          <h2 className="text-2xl font-semibold text-foreground mb-2">No digital home created</h2>
-          <p className="max-w-md mx-auto mb-8">
-            Start mapping your home to prepare for AI safety analysis. You can add multiple properties to monitor.
+          <h2 className="text-2xl font-medium tracking-tight mb-3">No properties yet</h2>
+          <p className="text-neutral-500 mb-8 max-w-sm mx-auto">
+            Get started by adding a property to monitor its environmental safety and care setup.
           </p>
-          <Button size="lg" asChild>
-            <Link to="/homes/new">
-              <Plus className="mr-2 h-5 w-5" />
-              Create Your First Home
-            </Link>
+          <Button 
+            onClick={() => navigate('/properties/new')}
+            className="rounded-full bg-black text-white px-8 h-12"
+          >
+            Add your first property
           </Button>
-        </div>
+        </motion.div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredHomes.map(home => {
-            const progress = home.rooms.length > 0 ? Math.min(100, home.rooms.length * 20) : 0;
-            return (
-              <Card key={home.id} className="overflow-hidden border-primary/20 shadow-sm transition-all hover:shadow-md relative flex flex-col">
-                {home.coverImage && (
-                  <div className="h-32 w-full overflow-hidden relative bg-muted">
-                    <img src={home.coverImage} alt={home.name} className="object-cover w-full h-full" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent" />
-                  </div>
-                )}
-                {!home.coverImage && <div className="absolute top-0 left-0 w-1 h-full bg-primary" />}
-                <CardHeader className="pb-4 relative">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
-                      <CardTitle className="text-xl flex items-center gap-2">
-                        {home.nickname || home.name}
-                      </CardTitle>
-                      <CardDescription className="flex items-center gap-1 mt-1">
-                        <MapPin className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{home.address || "No address provided"}</span>
-                      </CardDescription>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredHomes.map((home, index) => (
+            <motion.div
+              key={home.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              onClick={() => navigate(`/properties/${home.id}`)}
+              className="group cursor-pointer bg-white dark:bg-neutral-900 rounded-3xl overflow-hidden border border-neutral-200 dark:border-neutral-800 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1 flex flex-col"
+            >
+              <div className="aspect-[4/3] w-full bg-neutral-100 dark:bg-neutral-800 relative overflow-hidden">
+                 {home.coverImage ? (
+                   <img src={home.coverImage} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={home.name} />
+                 ) : (
+                   <div className="w-full h-full flex items-center justify-center">
+                      <Home className="w-12 h-12 text-neutral-300 dark:text-neutral-700" />
+                   </div>
+                 )}
+                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              </div>
+              <div className="p-6 flex-1 flex flex-col justify-between">
+                 <div>
+                    <h3 className="text-xl font-medium tracking-tight group-hover:text-black dark:group-hover:text-white transition-colors">
+                      {home.name}
+                    </h3>
+                    <p className="text-neutral-500 text-sm mt-2 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4" /> {home.address || "No address provided"}
+                    </p>
+                 </div>
+                 
+                 <div className="mt-8 flex items-center justify-between border-t border-neutral-100 dark:border-neutral-800 pt-4">
+                    <div className="text-sm font-medium text-neutral-500">
+                      {home.rooms?.length || 0} Rooms
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6 flex-1">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium text-muted-foreground">Setup Progress</span>
-                      <span className="font-bold">{progress}%</span>
+                    <div className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black transition-colors">
+                      <ChevronRight className="w-4 h-4" />
                     </div>
-                    <Progress value={progress} className="h-2" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Rooms</p>
-                      <p className="text-2xl font-semibold">{home.rooms.length}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Status</p>
-                      <Badge variant="outline" className="mt-1">
-                        {home.rooms.length > 0 ? 'Mapping' : 'New'}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter className="bg-muted/30 border-t px-6 py-4 flex gap-3">
-                  <Button variant="default" className="w-full" asChild>
-                    <Link to={`/homes/${home.id}`}>Manage</Link>
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-
-          <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center text-muted-foreground hover:bg-muted/50 transition-colors min-h-[300px]">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <Plus className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="font-semibold text-foreground text-lg mb-2">Add Another Property</h3>
-            <p className="max-w-[250px] mx-auto text-sm mb-6">Set up a new home profile to begin tracking safety and accessibility.</p>
-            <Button variant="outline" asChild>
-              <Link to="/homes/new">Create Home</Link>
-            </Button>
-          </Card>
+                 </div>
+              </div>
+            </motion.div>
+          ))}
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: filteredHomes.length * 0.1, duration: 0.5 }}
+            onClick={() => navigate('/properties/new')}
+            className="group cursor-pointer bg-neutral-50 dark:bg-neutral-900/50 rounded-3xl overflow-hidden border-2 border-dashed border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white transition-colors duration-300 flex flex-col items-center justify-center p-8 aspect-[4/3] md:aspect-auto"
+          >
+             <div className="w-16 h-16 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+               <Plus className="w-6 h-6 text-neutral-500 dark:text-neutral-400" />
+             </div>
+             <h3 className="text-lg font-medium tracking-tight">Add New Property</h3>
+             <p className="text-neutral-500 text-sm mt-1">Setup another location</p>
+          </motion.div>
         </div>
       )}
     </div>

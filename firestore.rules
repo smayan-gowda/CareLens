@@ -98,8 +98,8 @@ service cloud.firestore {
         ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
       ) && isValidScan(incoming());
       allow delete: if isSignedIn() && (
-        resource == null ||
-        ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        resource.data.userId == request.auth.uid ||
+        !('userId' in resource.data) ||
         ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
       );
     }

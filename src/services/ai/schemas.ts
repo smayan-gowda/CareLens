@@ -23,7 +23,7 @@ export interface SafetyAnalysis {
   hazards: {
     title: string;
     category: string;
-    severity: "critical" | "high" | "medium" | "low";
+    severity: "Critical" | "High" | "Medium" | "Low";
     description: string;
     location: string;
     confidence: number;

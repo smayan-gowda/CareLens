@@ -31,7 +31,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Slippery wet floor near tub/shower",
           category: "Fall Risk",
-          severity: "high",
+          severity: "High",
           description: "No dedicated high-traction surface or non-slip mat is visible in the active tub/shower area, creating a high slip hazard when wet.",
           location: "Shower/Tub floor",
           confidence: 90,
@@ -42,7 +42,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Missing grab bars near toilet",
           category: "Missing Safety Equipment",
-          severity: "high",
+          severity: "High",
           description: "There are no sturdy handrails or grab bars mounted near the toilet area to assist with sitting down or standing up.",
           location: "Wall adjacent to toilet",
           confidence: 92,
@@ -53,7 +53,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Missing shower grab bars",
           category: "Missing Safety Equipment",
-          severity: "high",
+          severity: "High",
           description: "The primary shower enclosure lacks visible heavy-duty wall-mounted grab bars for balance and stabilization.",
           location: "Shower enclosure wall",
           confidence: 95,
@@ -121,7 +121,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "High-reach cabinet storage storage",
           category: "Accessibility Barrier",
-          severity: "medium",
+          severity: "Medium",
           description: "Frequently used items appear stored in deep upper cabinets, necessitating reaching high or using unsafe step stools.",
           location: "Upper cabinets above counter",
           confidence: 85,
@@ -132,7 +132,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "No visible fire extinguisher nearby",
           category: "Missing Safety Equipment",
-          severity: "high",
+          severity: "High",
           description: "The cooking area does not have a dedicated Class B/C fire extinguisher within immediate reach.",
           location: "Near stove and entry point",
           confidence: 90,
@@ -143,7 +143,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Inadequate under-cabinet task lighting",
           category: "Poor Lighting",
-          severity: "medium",
+          severity: "Medium",
           description: "Shadows are visible beneath the upper wall cabinets, reducing visibility on primary food preparation counter spaces.",
           location: "Countertop area below cabinets",
           confidence: 88,
@@ -210,7 +210,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Loose area rug next to bed",
           category: "Trip Hazard",
-          severity: "high",
+          severity: "High",
           description: "A loose area rug is present along the side of the bed. Its edges may curl up, creating a significant catch or trip hazard when waking up or during nighttime transfers.",
           location: "Floor beside bed",
           confidence: 92,
@@ -221,7 +221,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Lack of immediate bedside path lighting",
           category: "Poor Lighting",
-          severity: "medium",
+          severity: "Medium",
           description: "No automatic nighttime path lighting is visible to illuminate the walk from the bedside to the doorway or bathroom.",
           location: "Pathways around bed",
           confidence: 88,
@@ -232,7 +232,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Bed height mismatch",
           category: "Fall Risk",
-          severity: "medium",
+          severity: "Medium",
           description: "The bed surface appears exceptionally high or low relative to normal seating height, complicating independent sitting and standing transfers.",
           location: "Bed surface",
           confidence: 82,
@@ -300,7 +300,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Trailing electrical extension cords",
           category: "Trip Hazard",
-          severity: "high",
+          severity: "High",
           description: "Electrical cords are routed across or immediately adjacent to walkways, presenting an immediate snag/trip danger.",
           location: "Floor near wall outlets and seating",
           confidence: 90,
@@ -311,7 +311,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Low seating with soft cushioning",
           category: "Unsafe Furniture",
-          severity: "medium",
+          severity: "Medium",
           description: "The primary sofa has deep, low seating with plush cushioning and lacks rigid, high armrests to aid in sitting and standing transitions.",
           location: "Sofa seating area",
           confidence: 86,
@@ -322,7 +322,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Inadequately cleared walkway channels",
           category: "Blocked Exit",
-          severity: "medium",
+          severity: "Medium",
           description: "The spacing between the coffee table, sofa, and side chairs is narrow, making navigating with a mobility device like a walker difficult.",
           location: "Central walkway clearance",
           confidence: 84,
@@ -388,7 +388,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Single-sided handrail installation",
           category: "Missing Safety Equipment",
-          severity: "high",
+          severity: "High",
           description: "The staircase only features a handrail on one side, leaving the other side open or unsupported, which is unsafe for bi-lateral grip needs.",
           location: "Staircase wall",
           confidence: 94,
@@ -399,7 +399,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Dim lighting over steps and landing",
           category: "Poor Lighting",
-          severity: "high",
+          severity: "High",
           description: "The illumination level along the stairway treads appears low, which hides step edges and landing transitions.",
           location: "Stair steps",
           confidence: 90,
@@ -456,7 +456,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Potential trip hazards in key pathways",
           category: "Trip Hazard",
-          severity: "medium",
+          severity: "Medium",
           description: "Unsecured loose carpets or rugs might slide, creating curling edges directly in primary walking pathways.",
           location: "Central walkway floor",
           confidence: 85,
@@ -467,7 +467,7 @@ function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
         {
           title: "Inadequate localized task lighting",
           category: "Poor Lighting",
-          severity: "medium",
+          severity: "Medium",
           description: "General light levels are insufficient for detailed tasks, reading, or navigating obstacles safely at night.",
           location: "Room corners and pathways",
           confidence: 82,
@@ -624,7 +624,7 @@ async function startServer() {
                   properties: {
                     title: { type: Type.STRING },
                     category: { type: Type.STRING },
-                    severity: { type: Type.STRING, description: "critical, high, medium, or low" },
+                    severity: { type: Type.STRING, description: "Critical, High, Medium, or Low" },
                     description: { type: Type.STRING },
                     location: { type: Type.STRING },
                     confidence: { type: Type.NUMBER },
@@ -865,6 +865,147 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
     } catch (error: any) {
       console.error("Yelp Proxy Server Error:", error);
       res.status(500).json({ error: "Internal server error fetching Yelp results", message: error.message });
+    }
+  });
+
+  // Helper for rule-based classification fallback
+  function getRuleBasedClassification(title: string): string {
+    const titleLower = (title || "").toLowerCase();
+    if (
+      titleLower.includes("grab bar") || 
+      titleLower.includes("shower") || 
+      titleLower.includes("tub") || 
+      titleLower.includes("bathroom")
+    ) {
+      return "Bathroom";
+    } else if (
+      titleLower.includes("light") || 
+      titleLower.includes("illumination") || 
+      titleLower.includes("lamp") ||
+      titleLower.includes("switch") ||
+      titleLower.includes("outlet")
+    ) {
+      return "Electrical";
+    } else if (
+      titleLower.includes("mat") || 
+      titleLower.includes("floor") || 
+      titleLower.includes("rug") ||
+      titleLower.includes("slip") ||
+      titleLower.includes("trip") ||
+      titleLower.includes("carpet")
+    ) {
+      return "Flooring";
+    } else if (
+      titleLower.includes("ramp") || 
+      titleLower.includes("wheelchair") || 
+      titleLower.includes("step") ||
+      titleLower.includes("access") ||
+      titleLower.includes("ada")
+    ) {
+      return "Accessibility";
+    } else if (titleLower.includes("plumb") || titleLower.includes("toilet") || titleLower.includes("leak") || titleLower.includes("sink")) {
+      return "Plumbing";
+    } else if (titleLower.includes("cabinet") || titleLower.includes("shelf") || titleLower.includes("shelves")) {
+      return "Cabinets";
+    } else if (titleLower.includes("stove") || titleLower.includes("cooktop") || titleLower.includes("kitchen")) {
+      return "Kitchen";
+    } else if (titleLower.includes("paint") || titleLower.includes("coating")) {
+      return "Painting";
+    } else if (titleLower.includes("stair") || titleLower.includes("handrail") || titleLower.includes("rail") || titleLower.includes("mount")) {
+      return "Handyman";
+    } else if (titleLower.includes("hvac") || titleLower.includes("heat") || titleLower.includes("air") || titleLower.includes("filter")) {
+      return "HVAC";
+    } else if (titleLower.includes("roof") || titleLower.includes("shingle")) {
+      return "Roofing";
+    } else if (titleLower.includes("medical") || titleLower.includes("walker") || titleLower.includes("wheelchair")) {
+      return "Medical Equipment";
+    } else if (titleLower.includes("bracket") || titleLower.includes("hardware") || titleLower.includes("screw") || titleLower.includes("fasten")) {
+      return "Hardware";
+    }
+    return "Handyman"; // Default fallback
+  }
+
+  // AI Suggestion Classification Route
+  app.post("/api/classify-suggestion", async (req, res) => {
+    try {
+      const { title, description } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "No suggestion title provided" });
+      }
+
+      if (!process.env.GEMINI_API_KEY) {
+        const category = getRuleBasedClassification(title);
+        return res.json({ category, suggestedQuery: title });
+      }
+
+      const ai = new GoogleGenAI({ 
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const allowedCategories = [
+        "ADA", "Plumbing", "Electrical", "HVAC", "Flooring", 
+        "Roofing", "Cabinets", "Kitchen", "Bathroom", "Hardware", 
+        "Medical Equipment", "Accessibility", "Painting", "Handyman"
+      ];
+
+      const promptText = `Classify this elderly home safety recommendation into exactly one of these 14 available categories:
+${allowedCategories.join(", ")}
+
+Recommendation Details:
+Title: ${title}
+Description: ${description || ''}
+
+Return a JSON object containing:
+1. "category": The selected category name. It MUST be EXACTLY one of the 14 listed above. If it fits multiple, select the single best fitting category.
+2. "suggestedQuery": A simplified 1-2 word query representing the primary safety hardware/service mentioned (e.g. "grab bars", "led lighting", "non-slip flooring", "ramp") which can be used to search Yelp or product marketplaces.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: promptText,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              category: { 
+                type: Type.STRING, 
+                description: "Must be exactly one of the 14 allowed categories." 
+              },
+              suggestedQuery: { 
+                type: Type.STRING, 
+                description: "Short 1-2 word search keyword for the item." 
+              }
+            },
+            required: ["category", "suggestedQuery"]
+          }
+        }
+      });
+
+      if (response.text) {
+        let jsonStr = response.text.trim();
+        if (jsonStr.startsWith("```json")) {
+          jsonStr = jsonStr.slice(7, -3);
+        }
+        const data = JSON.parse(jsonStr);
+        let category = data.category;
+        if (!allowedCategories.includes(category)) {
+          category = getRuleBasedClassification(title);
+        }
+        return res.json({ category, suggestedQuery: data.suggestedQuery || title });
+      } else {
+        throw new Error("Empty response from Gemini");
+      }
+
+    } catch (error) {
+      console.warn("AI Classification failed or quota exceeded. Using rule-based fallback.", error);
+      const { title } = req.body;
+      const category = getRuleBasedClassification(title);
+      res.json({ category, suggestedQuery: title });
     }
   });
 

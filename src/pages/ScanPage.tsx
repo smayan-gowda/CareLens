@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { UploadCloud, FileImage, X, Loader2, Sparkles, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { UploadCloud, FileImage, X, Loader2, Target, ScanLine, Camera } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Progress } from "@/components/ui/progress";
 import { useHomeStore } from "@/stores/useHomeStore";
 import { useScanStore } from "@/stores/scanStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -23,307 +21,224 @@ export function ScanPage() {
   const [selectedHomeId, setSelectedHomeId] = useState<string>(homeId || "");
   const [selectedRoomId, setSelectedRoomId] = useState<string>(roomId || "");
   
-  const [files, setFiles] = useState<File[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [stageMessage, setStageMessage] = useState("");
-
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
   const currentHome = visibleHomes.find(h => h.id === selectedHomeId);
   const currentRoom = currentHome?.rooms.find(r => r.id === selectedRoomId);
 
-  // If we came in via the global route and there's only 1 home, preselect it
   useEffect(() => {
     if (!selectedHomeId && visibleHomes.length === 1) {
       setSelectedHomeId(visibleHomes[0].id);
     }
   }, [selectedHomeId, homes]);
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      setPreview(URL.createObjectURL(selectedFile));
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const newFiles = Array.from(e.dataTransfer.files);
-      setFiles(prev => [...prev, ...newFiles]);
+      const selectedFile = e.dataTransfer.files[0];
+      setFile(selectedFile);
+      setPreview(URL.createObjectURL(selectedFile));
     }
   };
 
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
+  const handleAnalyze = async () => {
+    if (!user) return toast.error("Please login first");
+    if (!file) return toast.error("Please select an image");
+    if (!selectedHomeId) return toast.error("Please select a property");
+    if (!selectedRoomId) return toast.error("Please select a room");
 
-  const simulateScan = async () => {
-    if (!user) {
-      toast.error("You must be logged in to perform a scan");
-      return;
-    }
-
-    if ((files.length === 0 && (!currentRoom || currentRoom.images.length === 0)) || !selectedHomeId || !selectedRoomId) {
-      toast.error("Please provide images and select a room.");
-      return;
-    }
+    setIsAnalyzing(true);
     
-    setIsScanning(true);
-    setProgress(0);
-    setStageMessage("Initializing AI core...");
-    
-    const imageList = files.length > 0 
-      ? files.map(f => URL.createObjectURL(f)) 
-      : currentRoom?.images.map(img => img.url) || [];
-
     try {
-      const scanResult = await analysisService.analyzeRoom(
-        selectedHomeId,
-        selectedRoomId,
-        imageList,
-        (stage, prog) => {
-          setProgress(prog);
-          const messages = [
-            "Uploading image...",
-            "Understanding room layout...",
-            "Detecting objects...",
-            "Analyzing safety risks...",
-            "Generating recommendations...",
-            "Complete"
-          ];
-          setStageMessage(messages[stage - 1] || "Processing...");
-        }
-      );
+      const result = await analysisService.analyzeRoom(selectedHomeId, selectedRoomId, [preview!]);
       
-      await addScan(user.uid, selectedRoomId, {
-        ...scanResult,
-        homeId: selectedHomeId
-      });
+      await addScan(user.uid, selectedRoomId, result);
+
+      toast.success("Analysis complete");
       
-      // Add activity
-      const { addActivity, addTimelineEvent, addNotification } = useHomeStore.getState();
-      await addActivity(user.uid, {
-        homeId: selectedHomeId,
-        action: 'Safety Scan',
-        description: `Performed a safety scan of ${currentRoom?.name || 'a room'}`,
-        scanId: scanResult.id,
-      });
-
-      await addTimelineEvent(user.uid, {
-        homeId: selectedHomeId,
-        type: 'scan',
-        title: `Safety Scan: ${currentRoom?.name || 'Room'}`,
-        description: `Completed AI analysis of ${currentRoom?.name || 'the room'}. Found ${scanResult.hazards.length} potential hazards.`,
-        scoreChange: { from: 0, to: scanResult.safetyScore },
-        details: [
-          `Detected ${scanResult.hazards.length} hazards`,
-          `Generated ${scanResult.recommendations.length} safety recommendations`,
-          `Initial safety score: ${scanResult.safetyScore}/100`
-        ],
-        link: `/homes/${selectedHomeId}/rooms/${selectedRoomId}/reports/${scanResult.id}`,
-        scanId: scanResult.id,
-      });
-
-      await addNotification(user.uid, {
-        type: 'report',
-        title: 'New Scan Complete',
-        message: `Your ${currentRoom?.name || 'room'} safety report is ready for viewing.`,
-        link: `/homes/${selectedHomeId}/rooms/${selectedRoomId}/reports/${scanResult.id}`,
-        scanId: scanResult.id,
-      });
-
-      toast.success("Analysis complete!");
+      navigate(`/assessments`);
       
-      // Navigate to report
-      setTimeout(() => {
-        navigate(`/homes/${selectedHomeId}/rooms/${selectedRoomId}/reports/${scanResult.id}`);
-      }, 500);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      const errorMsg = error.message || "Unable to confidently analyze this image. Try taking a brighter photo showing more of the room.";
-      toast.error(errorMsg, {
-        description: "Please check your image quality and try again.",
-        duration: 5000,
-      });
-      setIsScanning(false);
+      toast.error("Analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
-  if (isScanning) {
+  if (isAnalyzing) {
     return (
-      <div className="max-w-2xl mx-auto h-[60vh] flex flex-col items-center justify-center space-y-8 animate-in fade-in duration-700">
-        <div className="relative">
-          <div className="absolute -inset-4 bg-primary/20 rounded-full blur-xl animate-pulse" />
-          <div className="h-24 w-24 bg-background border-2 border-primary rounded-full flex items-center justify-center relative z-10 shadow-lg shadow-primary/20">
-            <Sparkles className="h-10 w-10 text-primary animate-pulse" />
-          </div>
-        </div>
+      <div className="fixed inset-0 bg-white dark:bg-black z-50 flex flex-col items-center justify-center">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="relative w-64 h-64 flex items-center justify-center"
+        >
+           {preview && (
+             <img src={preview} className="absolute inset-0 w-full h-full object-cover rounded-full opacity-30 filter grayscale" />
+           )}
+           <motion.div 
+             animate={{ rotate: 360 }} 
+             transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+             className="absolute inset-0 rounded-full border-2 border-transparent border-t-black dark:border-t-white opacity-20"
+           />
+           <motion.div 
+             animate={{ rotate: -360 }} 
+             transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+             className="absolute inset-4 rounded-full border-2 border-transparent border-b-black dark:border-b-white opacity-20"
+           />
+           <ScanLine className="w-12 h-12 text-black dark:text-white relative z-10" />
+        </motion.div>
         
-        <div className="text-center space-y-2 w-full max-w-md">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground/90">Analyzing {currentRoom?.name || 'Room'}</h2>
-          <p className="text-muted-foreground h-6 flex items-center justify-center">
-            <AnimatePresence mode="wait">
-              <motion.span
-                key={stageMessage}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -5 }}
-                transition={{ duration: 0.2 }}
-              >
-                {stageMessage}
-              </motion.span>
-            </AnimatePresence>
-          </p>
-          <div className="pt-4">
-            <Progress value={progress} className="h-2 w-full bg-primary/10" />
-          </div>
-          <p className="text-xs text-muted-foreground pt-2 font-medium">{Math.round(progress)}%</p>
-        </div>
+        <motion.div
+           initial={{ y: 20, opacity: 0 }}
+           animate={{ y: 0, opacity: 1 }}
+           transition={{ delay: 0.3 }}
+           className="mt-12 text-center"
+        >
+           <h2 className="text-2xl font-medium tracking-tight mb-2">Analyzing Environment</h2>
+           <p className="text-neutral-500 max-w-sm">
+             Our computer vision model is detecting structural hazards, trip risks, and accessibility issues.
+           </p>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">AI Safety Scan</h1>
-        <p className="text-muted-foreground mt-1">Harness advanced computer vision to identify fall risks and accessibility barriers.</p>
+    <div className="max-w-4xl mx-auto space-y-12 pb-12">
+      <div className="text-center space-y-3 max-w-2xl mx-auto mb-12">
+        <h1 className="text-3xl font-medium tracking-tight text-foreground">Environmental Assessment</h1>
+        <p className="text-sm text-muted-foreground">
+          Upload or capture a wide-angle photo of the space to begin a professional safety inspection.
+        </p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-5 gap-8">
+        
+        {/* Settings Sidebar */}
         <div className="md:col-span-2 space-y-6">
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader>
-              <CardTitle>Room Images</CardTitle>
-              <CardDescription>Upload photos of the room for analysis. Ensure good lighting and clear views of the floor.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div 
-                className="border-2 border-dashed border-border/60 rounded-xl p-10 flex flex-col items-center justify-center text-center transition-all hover:bg-muted/40 hover:border-primary/50 cursor-pointer"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById('file-upload')?.click()}
-              >
-                <div className="bg-primary/5 p-4 rounded-full mb-4 ring-1 ring-primary/10">
-                  <UploadCloud className="h-8 w-8 text-primary" />
-                </div>
-                <h3 className="font-semibold text-lg mb-1">Select or drag images</h3>
-                <p className="text-sm text-muted-foreground max-w-xs mx-auto">Upload multiple photos for a comprehensive analysis</p>
-                <input 
-                  id="file-upload" 
-                  type="file" 
-                  accept="image/*" 
-                  multiple
-                  className="hidden" 
-                  onChange={(e) => {
-                    if (e.target.files) {
-                      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                    }
-                  }}
-                />
-              </div>
+          <div className="bg-card rounded-2xl p-6 border border-border/50 shadow-sm space-y-6">
+             <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-sm font-medium text-foreground tracking-tight">Context</h2>
+             </div>
+             
+             <div className="space-y-5">
+               <div className="space-y-2">
+                 <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Target Property</label>
+                 <Select value={selectedHomeId} onValueChange={setSelectedHomeId}>
+                   <SelectTrigger className="h-10 w-full bg-background border-border/50 rounded-lg focus:ring-1 focus:ring-ring text-sm">
+                     <span className="flex flex-1 text-left truncate">
+                       {currentHome?.name || "Select Property"}
+                     </span>
+                   </SelectTrigger>
+                   <SelectContent className="rounded-xl">
+                     {visibleHomes.map((home) => (
+                       <SelectItem key={home.id} value={home.id} className="rounded-lg">
+                         {home.name}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
+               </div>
 
-              {files.length > 0 && (
-                <div className="mt-6 space-y-3">
-                  <h4 className="text-sm font-medium">Selected Files ({files.length})</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {files.map((file, i) => (
-                      <div key={i} className="relative group rounded-lg overflow-hidden border bg-muted/30 aspect-square">
-                        <img 
-                          src={URL.createObjectURL(file)} 
-                          alt="Preview" 
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                           <Button variant="destructive" size="icon" className="h-8 w-8 rounded-full" onClick={(e) => { e.stopPropagation(); removeFile(i); }}>
-                             <X className="h-4 w-4" />
-                           </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {files.length === 0 && currentRoom && currentRoom.images.length > 0 && (
-                <div className="mt-6 p-4 border rounded-lg bg-blue-50/50 border-blue-100 dark:bg-blue-950/20 dark:border-blue-900">
-                  <div className="flex items-start gap-3">
-                    <Info className="h-5 w-5 text-blue-500 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300">Using existing room photos</h4>
-                      <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                        We'll analyze the {currentRoom.images.length} photo(s) already uploaded to {currentRoom.name}.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+               {selectedHomeId && (
+                 <motion.div 
+                   initial={{ opacity: 0, height: 0 }}
+                   animate={{ opacity: 1, height: 'auto' }}
+                   className="space-y-2"
+                 >
+                   <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Target Zone</label>
+                   <Select value={selectedRoomId} onValueChange={setSelectedRoomId}>
+                     <SelectTrigger className="h-10 w-full bg-background border-border/50 rounded-lg focus:ring-1 focus:ring-ring text-sm">
+                       <span className="flex flex-1 text-left truncate">
+                         {currentRoom?.name || "Select Room"}
+                       </span>
+                     </SelectTrigger>
+                     <SelectContent className="rounded-lg">
+                       {currentHome?.rooms.filter(r => !hiddenRooms.includes(r.id)).map((room) => (
+                         <SelectItem key={room.id} value={room.id} className="rounded-md text-sm">
+                           {room.name}
+                         </SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+                 </motion.div>
+               )}
+             </div>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader>
-              <CardTitle>Scan Target</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Home</label>
-                <Select value={selectedHomeId} onValueChange={(val) => { setSelectedHomeId(val); setSelectedRoomId(""); }} disabled={!!homeId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a home">
-                      {selectedHomeId ? visibleHomes.find(h => h.id === selectedHomeId)?.name : null}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {visibleHomes.map(h => (
-                      <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {selectedHomeId && (
-                <div className="space-y-2 animate-in fade-in duration-300">
-                  <label className="text-sm font-medium">Room</label>
-                  <Select value={selectedRoomId} onValueChange={setSelectedRoomId} disabled={!!roomId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a room">
-                        {selectedRoomId ? visibleHomes.find(h => h.id === selectedHomeId)?.rooms.find(r => r.id === selectedRoomId)?.name : null}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {visibleHomes.find(h => h.id === selectedHomeId)?.rooms.map(r => (
-                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-primary/20 bg-primary/5 shadow-sm">
-            <CardContent className="pt-6">
-              <div className="space-y-4 text-sm mb-6 text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-primary" />
-                  <span>Estimated time: 30 seconds</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-primary" />
-                  <span>Identifies over 50 hazard types</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-primary" />
-                  <span>Secure & private analysis</span>
-                </div>
-              </div>
-              
-              <Button 
-                className="w-full h-12 text-base font-medium shadow-sm" 
-                onClick={simulateScan}
-                disabled={(!selectedHomeId || !selectedRoomId) || (files.length === 0 && (!currentRoom || currentRoom.images.length === 0))}
+        {/* Upload Area */}
+        <div className="md:col-span-3">
+          <AnimatePresence mode="wait">
+            {!preview ? (
+              <motion.label
+                key="upload"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+                className="flex flex-col items-center justify-center w-full aspect-[4/3] rounded-2xl border border-dashed border-border/50 bg-background hover:bg-muted/30 transition-colors cursor-pointer group"
               >
-                <Sparkles className="mr-2 h-5 w-5" />
-                Begin AI Safety Scan
-              </Button>
-            </CardContent>
-          </Card>
+                <div className="w-16 h-16 bg-muted/50 rounded-full flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform duration-300 mb-4">
+                  <Camera className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-base font-medium tracking-tight text-foreground mb-1">Capture or Upload</h3>
+                <p className="text-muted-foreground text-xs max-w-[200px] text-center">
+                  Drag and drop a clear photo of the room here.
+                </p>
+                <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+              </motion.label>
+            ) : (
+              <motion.div
+                key="preview"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-black shadow-sm"
+              >
+                <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => {
+                      setFile(null);
+                      setPreview(null);
+                    }}
+                    className="rounded-full bg-black/40 border-white/10 text-white hover:bg-black/60 backdrop-blur-md h-8 w-8"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="absolute bottom-6 left-6 right-6">
+                   <Button 
+                     onClick={handleAnalyze}
+                     disabled={!selectedHomeId || !selectedRoomId}
+                     className="w-full h-10 rounded-lg bg-white text-black hover:bg-neutral-100 text-sm font-medium transition-transform active:scale-95"
+                   >
+                     Begin Technical Analysis
+                   </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

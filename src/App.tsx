@@ -24,7 +24,6 @@ import { CommunityPage } from "./pages/CommunityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-
 import { useHomeStore } from "./stores/useHomeStore";
 import { useScanStore } from "./stores/scanStore";
 
@@ -32,10 +31,9 @@ function ProtectedRoute() {
   const { user, loading, initialized } = useAuthStore();
   const { subscribe: subscribeHome } = useHomeStore();
   const { subscribe: subscribeScan } = useScanStore();
-  
+
   useEffect(() => {
     if (user) {
-      console.log('Subscribing to user data for:', user.uid);
       const unsubHome = subscribeHome(user.uid);
       const unsubScan = subscribeScan(user.uid);
       return () => {
@@ -50,17 +48,16 @@ function ProtectedRoute() {
       <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
     </div>;
   }
-  
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return <Outlet />;
 }
 
 export default function App() {
   const { init } = useAuthStore();
-
   useEffect(() => {
     init();
   }, [init]);
@@ -74,20 +71,23 @@ export default function App() {
           
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/overview" element={<DashboardPage />} />
               <Route path="/scan" element={<ScanPage />} />
-              <Route path="/homes/:homeId/rooms/:roomId/scan" element={<ScanPage />} />
-              <Route path="/homes/:homeId/rooms/:roomId/reports/:reportId" element={<ReportPage />} />
-              <Route path="/homes" element={<HomesPage />} />
-              <Route path="/homes/new" element={<HomeCreatePage />} />
-              <Route path="/homes/:homeId" element={<HomeProfilePage />} />
-              <Route path="/homes/:homeId/rooms/new" element={<RoomCreatePage />} />
-              <Route path="/homes/:homeId/rooms/:roomId" element={<RoomDetailPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/timeline" element={<TimelinePage />} />
-              <Route path="/resources" element={<ResourcesPage />} />
-              <Route path="/community" element={<CommunityPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/properties/:homeId/rooms/:roomId/scan" element={<ScanPage />} />
+              <Route path="/properties/:homeId/rooms/:roomId/assessments/:reportId" element={<ReportPage />} />
+              <Route path="/properties" element={<HomesPage />} />
+              <Route path="/properties/new" element={<HomeCreatePage />} />
+              <Route path="/properties/:homeId" element={<HomeProfilePage />} />
+              <Route path="/properties/:homeId/rooms/new" element={<RoomCreatePage />} />
+              <Route path="/properties/:homeId/rooms/:roomId" element={<RoomDetailPage />} />
+              <Route path="/assessments" element={<ReportsPage />} />
+              <Route path="/progress" element={<TimelinePage />} />
+              <Route path="/marketplace" element={<ResourcesPage />} />
+              <Route path="/network" element={<CommunityPage />} />
+              <Route path="/profile" element={<SettingsPage />} />
+              <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
+              <Route path="/homes" element={<Navigate to="/properties" replace />} />
+              <Route path="/reports" element={<Navigate to="/assessments" replace />} />
             </Route>
           </Route>
           
