@@ -89,20 +89,20 @@ export function TimelinePage() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-neutral-900 rounded-3xl p-16 text-center border border-neutral-200 dark:border-neutral-800 shadow-sm"
+          className="bg-card rounded-[2.5rem] p-16 text-center border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)]"
         >
-          <div className="w-24 h-24 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="w-24 h-24 bg-neutral-100 dark:bg-neutral-800 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <Clock className="w-10 h-10 text-neutral-400" />
           </div>
           <h2 className="text-2xl font-medium tracking-tight mb-3">No activity yet</h2>
-          <p className="text-neutral-500 mb-8 max-w-sm mx-auto">
+          <p className="text-neutral-500 mb-8 max-w-sm mx-auto font-light">
             Your progress history will appear here once you start scanning and resolving hazards.
           </p>
         </motion.div>
       ) : (
         <div className="relative pl-8 md:pl-0">
-          <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-neutral-200 dark:bg-neutral-800 -translate-x-1/2" />
-          <div className="md:hidden absolute left-0 top-0 bottom-0 w-px bg-neutral-200 dark:bg-neutral-800 ml-4" />
+          <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-border/40 -translate-x-1/2" />
+          <div className="md:hidden absolute left-0 top-0 bottom-0 w-px bg-border/40 ml-4" />
 
           <div className="space-y-12">
             {sortedEvents.map((event, index) => {
@@ -116,21 +116,21 @@ export function TimelinePage() {
                   className={`relative flex items-center ${isEven ? 'md:justify-start' : 'md:justify-end'} justify-end w-full`}
                 >
                    {/* Marker */}
-                   <div className="absolute left-[-32px] md:left-1/2 w-8 h-8 rounded-full bg-white dark:bg-black border-4 border-neutral-100 dark:border-neutral-800 flex items-center justify-center -translate-x-1/2 z-10 shadow-sm">
-                      <div className="w-2 h-2 rounded-full bg-neutral-400 dark:bg-neutral-600" />
+                   <div className="absolute left-[-32px] md:left-1/2 w-8 h-8 rounded-full bg-card border-4 border-muted flex items-center justify-center -translate-x-1/2 z-10 shadow-sm">
+                      <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
                    </div>
 
                    {/* Content */}
                    <div className={`w-full md:w-[calc(50%-48px)] ${isEven ? 'md:pr-12' : 'md:pl-12'}`}>
-                     <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-neutral-200 dark:border-neutral-800 shadow-sm hover:shadow-xl transition-all duration-300">
-                        <div className="flex items-start gap-4">
-                           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getEventBackground(event.type)}`}>
+                     <div className="bg-card rounded-[2rem] p-6 border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-start gap-5">
+                           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border border-black/5 dark:border-white/5 shadow-sm ${getEventBackground(event.type)}`}>
                               {getEventIcon(event.type)}
                            </div>
                            <div className="space-y-1">
                               <h3 className="font-medium tracking-tight text-lg">{event.title}</h3>
-                              <p className="text-neutral-500 text-sm leading-relaxed">{event.description}</p>
-                              <div className="flex items-center gap-2 pt-2 text-xs font-medium text-neutral-400">
+                              <p className="text-muted-foreground text-sm leading-relaxed font-light">{event.description}</p>
+                              <div className="flex items-center gap-2 pt-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-widest">
                                 <Clock className="w-3.5 h-3.5" />
                                 {format(event.timestamp, "MMM d, yyyy 'at' h:mm a")}
                               </div>

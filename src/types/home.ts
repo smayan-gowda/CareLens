@@ -102,6 +102,7 @@ export interface CommunityPost {
   title: string;
   content: string;
   likes: number;
+  likedBy?: string[];
   commentCount: number;
   timestamp: string;
 }
@@ -113,6 +114,8 @@ export interface CommunityComment {
   authorName: string;
   authorAvatar?: string;
   content: string;
+  likes?: number;
+  likedBy?: string[];
   timestamp: string;
 }
 

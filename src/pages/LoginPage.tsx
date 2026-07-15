@@ -90,59 +90,59 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md border-border/60 shadow-xl rounded-3xl overflow-hidden bg-white">
-        <CardHeader className="text-center pb-6 pt-10">
-          <div className="mx-auto h-14 w-14 bg-muted rounded-2xl flex items-center justify-center text-foreground mb-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-full max-w-md border-black/5 dark:border-white/5 shadow-[0_4px_40px_rgb(0,0,0,0.04)] rounded-[2.5rem] overflow-hidden bg-card">
+        <CardHeader className="text-center pb-6 pt-12 px-8">
+          <div className="mx-auto h-16 w-16 bg-muted rounded-2xl flex items-center justify-center text-foreground mb-6 shadow-sm border border-black/5 dark:border-white/5">
             <ShieldCheck className="h-8 w-8" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">CareLens Safety</CardTitle>
-          <CardDescription className="text-sm mt-1">
+          <CardTitle className="text-3xl font-medium tracking-tight text-foreground">CareLens</CardTitle>
+          <CardDescription className="text-base font-light mt-2 text-muted-foreground">
             Securely access your home safety dashboard.
           </CardDescription>
         </CardHeader>
         
-        <CardContent className="px-8">
+        <CardContent className="px-10 pb-10">
           <Tabs defaultValue="signin" className="w-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-2 mb-8 h-11 rounded-xl bg-muted/50 p-1">
-              <TabsTrigger value="signin" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Sign In</TabsTrigger>
-              <TabsTrigger value="signup" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">Sign Up</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-8 h-12 rounded-2xl bg-muted p-1">
+              <TabsTrigger value="signin" className="rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm font-medium">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="rounded-xl data-[state=active]:bg-background data-[state=active]:shadow-sm font-medium">Sign Up</TabsTrigger>
             </TabsList>
             
             <TabsContent value="signin" className="w-full m-0 p-0">
-              <form onSubmit={handleEmailLogin} className="space-y-4 w-full">
-                <div className="space-y-1.5 w-full">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Email Address</Label>
+              <form onSubmit={handleEmailLogin} className="space-y-5 w-full">
+                <div className="space-y-2 w-full">
+                  <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Email Address</Label>
                   <div className="relative w-full">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
                     <Input 
                       type="email" 
                       placeholder="name@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="pl-11 h-12 bg-muted/20 border-border/40 rounded-xl w-full"
+                      className="pl-12 h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl w-full text-base shadow-none"
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5 w-full">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Password</Label>
+                <div className="space-y-2 w-full">
+                  <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Password</Label>
                   <div className="relative w-full">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
                     <Input 
                       type="password" 
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="pl-11 h-12 bg-muted/20 border-border/40 rounded-xl w-full"
+                      className="pl-12 h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl w-full text-base shadow-none"
                     />
                   </div>
                 </div>
                 <Button 
                   type="submit" 
                   disabled={loading || isSubmitting}
-                  className="w-full h-12 rounded-xl font-bold mt-2 bg-black text-white hover:bg-black/90 transition-all active:scale-[0.98]"
+                  className="w-full h-14 rounded-2xl font-medium mt-4 bg-foreground text-background shadow-md transition-all active:scale-[0.98] text-base"
                 >
                   {isSubmitting ? 'Signing in...' : 'Sign In'}
                 </Button>
@@ -150,39 +150,39 @@ export function LoginPage() {
             </TabsContent>
             
             <TabsContent value="signup" className="w-full m-0 p-0">
-              <form onSubmit={handleEmailSignUp} className="space-y-4 w-full">
-                <div className="space-y-1.5 w-full">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Full Name</Label>
+              <form onSubmit={handleEmailSignUp} className="space-y-5 w-full">
+                <div className="space-y-2 w-full">
+                  <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Full Name</Label>
                   <div className="relative w-full">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
                     <Input 
                       type="text" 
                       placeholder="John Doe"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
-                      className="pl-11 h-12 bg-muted/20 border-border/40 rounded-xl w-full"
+                      className="pl-12 h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl w-full text-base shadow-none"
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5 w-full">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Email Address</Label>
+                <div className="space-y-2 w-full">
+                  <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Email Address</Label>
                   <div className="relative w-full">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
                     <Input 
                       type="email" 
                       placeholder="name@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="pl-11 h-12 bg-muted/20 border-border/40 rounded-xl w-full"
+                      className="pl-12 h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl w-full text-base shadow-none"
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5 w-full">
-                  <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Password</Label>
+                <div className="space-y-2 w-full">
+                  <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Password</Label>
                   <div className="relative w-full">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
                     <Input 
                       type="password" 
                       placeholder="Min. 6 characters"
@@ -190,14 +190,14 @@ export function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       minLength={6}
-                      className="pl-11 h-12 bg-muted/20 border-border/40 rounded-xl w-full"
+                      className="pl-12 h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl w-full text-base shadow-none"
                     />
                   </div>
                 </div>
                 <Button 
                   type="submit" 
                   disabled={loading || isSubmitting}
-                  className="w-full h-12 rounded-xl font-bold mt-2 bg-black text-white hover:bg-black/90 transition-all active:scale-[0.98]"
+                  className="w-full h-14 rounded-2xl font-medium mt-4 bg-foreground text-background shadow-md transition-all active:scale-[0.98] text-base"
                 >
                   {isSubmitting ? 'Creating account...' : 'Create Account'}
                 </Button>
@@ -207,10 +207,10 @@ export function LoginPage() {
 
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border/40"></span>
+              <span className="w-full border-t border-black/5 dark:border-white/5"></span>
             </div>
-            <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-bold">
-              <span className="bg-white px-3 text-muted-foreground/60">Or continue with</span>
+            <div className="relative flex justify-center text-xs font-medium text-muted-foreground uppercase tracking-widest">
+              <span className="bg-card px-4">Or continue with</span>
             </div>
           </div>
 
@@ -218,7 +218,7 @@ export function LoginPage() {
             variant="outline"
             onClick={handleGoogleLogin} 
             disabled={loading || isSubmitting}
-            className="w-full h-14 font-bold rounded-xl gap-3 border-primary/20 hover:bg-primary/5 transition-all bg-white text-foreground shadow-sm hover:shadow-md active:scale-[0.98] ring-1 ring-primary/10"
+            className="w-full h-14 font-medium rounded-2xl gap-3 border border-border bg-card text-foreground hover:bg-muted/50 shadow-sm transition-all active:scale-[0.98] text-base"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path

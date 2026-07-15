@@ -1235,22 +1235,22 @@ export function ResourcesPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-16 px-6">
+    <div className="max-w-7xl mx-auto space-y-6 pb-12 px-4 sm:px-6">
       
       {/* Header Panel */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-12 pb-8 border-b border-border/40">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 py-6 border-b border-border mb-8">
         <div>
-          <h1 className="text-3xl font-medium tracking-tight text-foreground flex items-center gap-3">
-            <Building className="h-7 w-7 text-muted-foreground" />
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground flex items-center gap-3">
+            <Building className="h-8 w-8 text-primary/80" />
             Marketplace
           </h1>
-          <p className="text-muted-foreground text-sm mt-2 max-w-lg">
+          <p className="text-muted-foreground text-sm font-light mt-2 max-w-lg">
             Discover local professionals, products, and community grants to upgrade your home safely.
           </p>
         </div>
 
         {/* Tab Selection */}
-        <div className="flex bg-muted/30 p-1 rounded-full border border-border/50 self-start md:self-auto shadow-sm">
+        <div className="flex bg-muted/30 p-1.5 rounded-full border border-border self-start md:self-auto shadow-sm">
           {[
             { id: 'local', label: 'Local Specialists', icon: MapPin },
             { id: 'saved', label: 'Favorites', icon: Heart }
@@ -1261,16 +1261,16 @@ export function ResourcesPage() {
                 setActiveTab(tab.id as any);
                 setSelectedCategory("All");
               }}
-              className={`flex items-center justify-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-colors ${
+              className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-colors ${
                 activeTab === tab.id 
-                  ? 'bg-background text-foreground shadow-sm border border-border/50' 
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent'
+                  ? 'bg-background text-foreground shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
               <tab.icon className="w-4 h-4" />
               {tab.label}
               {tab.id === 'saved' && savedItems.length > 0 && (
-                <span className="ml-1.5 bg-foreground/10 text-foreground rounded-full text-[10px] px-2 py-0.5 font-semibold">
+                <span className="ml-1.5 bg-primary/10 text-primary rounded-full text-[10px] px-2 py-0.5 font-bold">
                   {savedItems.length}
                 </span>
               )}
@@ -1280,21 +1280,21 @@ export function ResourcesPage() {
       </div>
 
       {/* Main Core Section */}
-      <div className="grid lg:grid-cols-12 gap-8 items-start">
+      <div className="grid lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Column: Context panel, filters, and smart AI matching suggestions (Span 4) */}
         <div className="lg:col-span-4 space-y-6">
           
           {/* Main Keywords and Location Search */}
-          <div className="bg-card p-6 rounded-2xl border border-border/50 shadow-sm space-y-5">
-            <h3 className="font-medium text-sm text-foreground">Search Settings</h3>
+          <div className="bg-card p-6 rounded-[2rem] border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] dark:shadow-[0_4px_20px_rgb(0,0,0,0.1)] space-y-4">
+            <h3 className="font-medium text-base tracking-tight text-foreground">Search Resources</h3>
             
             <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
                 id="keyword-filter-bar"
-                placeholder="Search specialties (e.g., grab bars)..." 
-                className="pl-9 h-10 rounded-xl bg-background border-border/50 text-sm focus-visible:ring-1 focus-visible:ring-ring" 
+                placeholder="Search specialties (e.g., grab bars, ramps)..." 
+                className="pl-11 h-12 rounded-xl bg-muted/50 border-transparent focus:border-border text-sm transition-all" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1307,30 +1307,30 @@ export function ResourcesPage() {
                   handleSearchSubmit();
                 }} className="flex gap-2">
                   <div className="relative flex-1">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input 
                       id="search-address-input"
                       placeholder="City, state, or ZIP..." 
-                      className="pl-9 h-10 rounded-xl bg-background border-border/50 text-sm focus-visible:ring-1 focus-visible:ring-ring" 
+                      className="pl-11 h-12 rounded-xl bg-muted/50 border-transparent focus:border-border text-sm font-light transition-all" 
                       value={locationQuery}
                       onChange={(e) => setLocationQuery(e.target.value)}
                     />
                   </div>
-                  <Button id="submit-search-btn" type="submit" variant="default" className="h-10 px-4 rounded-xl text-xs">
-                    Find
+                  <Button id="submit-search-btn" type="submit" className="h-12 px-6 rounded-xl bg-foreground hover:bg-foreground/90 text-background transition-colors shrink-0 text-sm font-medium shadow-sm">
+                    Search
                   </Button>
                 </form>
 
                 {/* GPS and Popular cities quick selection */}
-                <div className="space-y-2.5">
+                <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-medium text-muted-foreground">Quick Locations</span>
+                    <span className="text-xs font-medium text-muted-foreground">Quick Locations</span>
                     <button 
                       id="use-gps-locate-btn"
                       onClick={handleGPSLocate}
-                      className="text-[11px] font-medium text-foreground hover:underline flex items-center gap-1 transition-all"
+                      className="text-xs font-medium text-foreground hover:opacity-70 flex items-center gap-1.5 active:scale-95 transition-all"
                     >
-                      <Globe className="w-3.5 h-3.5 text-muted-foreground" /> Use GPS
+                      <Globe className="w-3.5 h-3.5 text-emerald-500" /> Use GPS
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1341,10 +1341,10 @@ export function ResourcesPage() {
                           key={city.name}
                           id={`quick-search-city-${city.name.replace(/[^a-zA-Z]/g, '')}`}
                           onClick={() => handleCityClick(city)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                          className={`px-4 py-2 rounded-xl text-xs transition-all border ${
                             isActive
                               ? 'bg-foreground text-background border-foreground shadow-sm'
-                              : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                              : 'bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground'
                           }`}
                         >
                           {city.name.split(',')[0]}
@@ -1359,29 +1359,29 @@ export function ResourcesPage() {
 
           {/* Collapsible Advanced Filters Panel */}
           {activeTab === 'local' && (
-            <div className="bg-card p-6 rounded-2xl border border-border/50 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-neutral-900 p-6 rounded-3xl border border-neutral-200/60 dark:border-neutral-800/80 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium text-sm text-foreground flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-                  Filters
+                <h3 className="font-bold text-sm text-neutral-800 dark:text-neutral-200 uppercase tracking-wider flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
+                  Advanced Filters
                 </h3>
                 <button 
                   id="toggle-filters-drawer-btn"
                   onClick={() => setShowFiltersDrawer(!showFiltersDrawer)}
-                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-medium"
+                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
                 >
-                  {showFiltersDrawer ? "Hide" : "Show"}
+                  {showFiltersDrawer ? "Hide Options" : "Show All"}
                 </button>
               </div>
 
               {/* Collapsible filter items */}
-              <div className={`space-y-4 transition-all duration-300 overflow-hidden ${showFiltersDrawer ? 'max-h-[500px] opacity-100 mt-4' : 'max-h-0 opacity-0 pointer-events-none mt-0'}`}>
+              <div className={`space-y-4 transition-all duration-300 overflow-hidden ${showFiltersDrawer ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
                 
                 {/* Search radius slider */}
                 <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-medium text-foreground">
+                  <div className="flex justify-between text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                     <span>Search Radius</span>
-                    <span className="text-muted-foreground">{searchRadius} miles</span>
+                    <span className="text-indigo-600 dark:text-indigo-400">{searchRadius} miles</span>
                   </div>
                   <input 
                     id="search-radius-slider"
@@ -1391,24 +1391,29 @@ export function ResourcesPage() {
                     step="5"
                     value={searchRadius} 
                     onChange={(e) => setSearchRadius(parseInt(e.target.value))}
-                    className="w-full accent-foreground cursor-pointer"
+                    className="w-full accent-indigo-600 dark:accent-indigo-500 cursor-pointer"
                   />
+                  <div className="flex justify-between text-[10px] text-neutral-400">
+                    <span>5 mi</span>
+                    <span>25 mi</span>
+                    <span>50 mi</span>
+                  </div>
                 </div>
 
                 {/* Rating filter select */}
                 <div className="space-y-2">
-                  <label className="text-[11px] font-medium text-muted-foreground">Minimum Rating</label>
-                  <div className="grid grid-cols-4 gap-2">
+                  <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">Minimum Rating</label>
+                  <div className="grid grid-cols-4 gap-1.5">
                     {[0, 3.5, 4.0, 4.5].map((val) => (
                       <button
                         key={val}
                         type="button"
                         id={`rating-filter-choice-${val}`}
                         onClick={() => setMinRating(val)}
-                        className={`py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        className={`py-1.5 rounded-lg text-xs font-medium border transition-all ${
                           minRating === val
-                            ? 'bg-foreground text-background border-foreground'
-                            : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                            ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500'
+                            : 'bg-neutral-50 text-neutral-600 border-neutral-200 dark:bg-neutral-950 dark:border-neutral-850 dark:text-neutral-400 hover:bg-neutral-100'
                         }`}
                       >
                         {val === 0 ? "Any" : `${val}★`}
@@ -1419,18 +1424,18 @@ export function ResourcesPage() {
 
                 {/* Price level select */}
                 <div className="space-y-2">
-                  <label className="text-[11px] font-medium text-muted-foreground">Price Tier</label>
-                  <div className="grid grid-cols-5 gap-2">
+                  <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">Price Tier Limit</label>
+                  <div className="grid grid-cols-5 gap-1.5">
                     {[null, 1, 2, 3, 4].map((val) => (
                       <button
                         key={val === null ? 'any' : val}
                         type="button"
                         id={`price-filter-choice-${val}`}
                         onClick={() => setPriceLevel(val)}
-                        className={`py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        className={`py-1.5 rounded-lg text-xs font-medium border transition-all ${
                           priceLevel === val
-                            ? 'bg-foreground text-background border-foreground'
-                            : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                            ? 'bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500'
+                            : 'bg-neutral-50 text-neutral-600 border-neutral-200 dark:bg-neutral-950 dark:border-neutral-850 dark:text-neutral-400 hover:bg-neutral-100'
                         }`}
                       >
                         {val === null ? "Any" : "$".repeat(val)}
@@ -1440,9 +1445,9 @@ export function ResourcesPage() {
                 </div>
 
                 {/* Switch Filters */}
-                <div className="space-y-4 pt-4 border-t border-border/50">
+                <div className="space-y-3 pt-2 border-t border-neutral-100 dark:border-neutral-800">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="filter-open-now" className="text-xs font-medium text-foreground">Open Now Only</Label>
+                    <Label htmlFor="filter-open-now" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">Open Now Only</Label>
                     <Switch 
                       id="filter-open-now" 
                       checked={openNow} 
@@ -1450,7 +1455,7 @@ export function ResourcesPage() {
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="filter-eco-friendly" className="text-xs font-medium text-foreground">Eco-Friendly</Label>
+                    <Label htmlFor="filter-eco-friendly" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">Eco-Friendly / Green Specialists</Label>
                     <Switch 
                       id="filter-eco-friendly" 
                       checked={ecoFriendlyOnly} 
@@ -1458,7 +1463,7 @@ export function ResourcesPage() {
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="filter-fastest" className="text-xs font-medium text-foreground">Same-Day Service</Label>
+                    <Label htmlFor="filter-fastest" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">Same-Day / Emergency Teams</Label>
                     <Switch 
                       id="filter-fastest" 
                       checked={fastestAvailabilityOnly} 
@@ -1469,28 +1474,28 @@ export function ResourcesPage() {
               </div>
 
               {/* Sort By Choice always visible */}
-              <div className="space-y-2 pt-4 border-t border-border/50 mt-4">
-                <label className="text-[11px] font-medium text-muted-foreground">Sort By</label>
+              <div className="space-y-1.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Sort Listings By</label>
                 <select
                   id="sort-listings-selector"
                   value={sortBy}
                   onChange={(e: any) => setSortBy(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg border border-border/50 bg-background text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full h-10 px-3 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-xs font-semibold text-neutral-700 dark:text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="match">Highest Match Score</option>
-                  <option value="rating">Highest Rating</option>
-                  <option value="distance">Closest Distance</option>
-                  <option value="popularity">Most Reviewed</option>
+                  <option value="match">🧠 Highest Smart Match Score</option>
+                  <option value="rating">★ Highest Yelp Rating</option>
+                  <option value="distance">🚗 Closest Driving Distance</option>
+                  <option value="popularity">👥 Most Reviewed (Popular)</option>
                 </select>
               </div>
             </div>
           )}
 
           {/* AI Safety recommendations list tailored to latest scan findings */}
-          <div className="bg-muted/30 rounded-2xl p-6 border border-border/50 shadow-sm space-y-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-foreground" />
-              <h3 className="font-medium text-sm text-foreground">Smart Suggestions</h3>
+          <div className="bg-neutral-150/40 dark:bg-neutral-900/30 rounded-3xl p-6 border border-neutral-200/40 dark:border-neutral-800/40 shadow-sm space-y-4">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="h-5 w-5 text-indigo-500 fill-indigo-500" />
+              <h3 className="font-bold text-sm text-neutral-800 dark:text-neutral-200 uppercase tracking-wider">Smart Assist Suggestions</h3>
             </div>
             
             {latestScan ? (
@@ -1506,32 +1511,32 @@ export function ResourcesPage() {
                       <div 
                         key={recId} 
                         onClick={() => handleRecommendationClick(rec, idx)}
-                        className={`group flex flex-col gap-1.5 bg-background p-4 rounded-xl border hover:border-foreground/30 hover:shadow-sm transition-all cursor-pointer active:scale-95 ${
+                        className={`group flex flex-col gap-1 bg-white dark:bg-neutral-900 p-4 rounded-2xl border hover:border-indigo-400 dark:hover:border-indigo-650 hover:shadow-md transition-all cursor-pointer active:scale-98 ${
                           isCurrentClassifying 
-                            ? 'border-foreground/50 ring-2 ring-foreground/5 pointer-events-none' 
-                            : 'border-border/50'
+                            ? 'border-indigo-500 ring-2 ring-indigo-500/10 pointer-events-none' 
+                            : 'border-neutral-200/50 dark:border-neutral-800/80'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-medium text-foreground group-hover:text-muted-foreground transition-colors line-clamp-1">
+                          <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
                             {rec.title}
                           </span>
                           {isCurrentClassifying ? (
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium animate-pulse shrink-0">
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                              <span>Scanning...</span>
+                            <div className="flex items-center gap-1 text-[10px] text-indigo-500 font-semibold animate-pulse shrink-0">
+                              <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                              <span>Classifying...</span>
                             </div>
                           ) : (
                             <Badge className={`${
                               rec.priority === 'Critical' || rec.priority === 'High'
-                                ? 'bg-destructive/10 text-destructive border-transparent'
-                                : 'bg-warning/10 text-warning border-transparent'
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                             } border shrink-0 text-[9px] px-1.5 py-0`} variant="outline">
                               {rec.priority}
                             </Badge>
                           )}
                         </div>
-                        <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+                        <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
                           {rec.description}
                         </p>
                       </div>
@@ -1550,12 +1555,12 @@ export function ResourcesPage() {
         </div>
 
         {/* Right Column: Interactive split screen display: listing on left, interactive leaflet map on right (Span 8) */}
-        <div className="lg:col-span-8 flex flex-col min-h-[680px] bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="lg:col-span-8 flex flex-col min-h-[680px] bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden">
           
           {/* Header section with categories bar */}
-          <div className="p-6 border-b border-border/40 bg-muted/20 space-y-4">
+          <div className="p-6 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/50 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium text-base tracking-tight text-foreground">
+              <h3 className="font-bold text-base tracking-tight text-neutral-900 dark:text-neutral-50">
                 {activeTab === 'local' && `Local Pros in ${activeCityName} (${filteredProviders.length} matches)`}
                 {activeTab === 'products' && `Safety Gear & Grab Bars (${filteredProducts.length} matching)`}
                 {activeTab === 'saved' && `Bookmarked Resources (${savedItems.length} items)`}
@@ -1563,14 +1568,14 @@ export function ResourcesPage() {
               
               {/* Mobile list vs map toggle (Zillow style) */}
               {activeTab === 'local' && (
-                <div className="flex md:hidden bg-muted/50 p-1 rounded-xl">
+                <div className="flex md:hidden bg-neutral-100 dark:bg-neutral-850 p-1 rounded-xl">
                   <button
                     id="mobile-view-toggle-list"
                     onClick={() => setMobileViewMode('list')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
                       mobileViewMode === 'list' 
-                        ? 'bg-background text-foreground shadow-sm' 
-                        : 'text-muted-foreground'
+                        ? 'bg-white text-black dark:bg-neutral-900 dark:text-white shadow-sm' 
+                        : 'text-neutral-500'
                     }`}
                   >
                     <List className="w-3.5 h-3.5" /> List
@@ -1578,10 +1583,10 @@ export function ResourcesPage() {
                   <button
                     id="mobile-view-toggle-map"
                     onClick={() => setMobileViewMode('map')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
                       mobileViewMode === 'map' 
-                        ? 'bg-background text-foreground shadow-sm' 
-                        : 'text-muted-foreground'
+                        ? 'bg-white text-black dark:bg-neutral-900 dark:text-white shadow-sm' 
+                        : 'text-neutral-500'
                     }`}
                   >
                     <Navigation className="w-3.5 h-3.5" /> Map
@@ -1591,7 +1596,7 @@ export function ResourcesPage() {
             </div>
             
             {activeTab !== 'saved' && (
-              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+              <div className="flex gap-2 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth">
                 {AVAILABLE_CATEGORIES.map(catName => {
                   const isSelected = selectedCategory === catName;
                   return (
@@ -1599,10 +1604,10 @@ export function ResourcesPage() {
                       key={catName}
                       id={`category-badge-${catName}`}
                       onClick={() => setSelectedCategory(catName)}
-                      className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-colors ${
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border transition-all ${
                         isSelected 
-                          ? 'bg-foreground text-background border-foreground shadow-sm' 
-                          : 'bg-background text-muted-foreground border-border/50 hover:bg-muted/50 hover:text-foreground'
+                          ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white shadow-sm' 
+                          : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50 dark:bg-neutral-950 dark:text-neutral-350 dark:border-neutral-800 dark:hover:bg-neutral-850'
                       }`}
                     >
                       {catName}
@@ -1629,7 +1634,7 @@ export function ResourcesPage() {
                 >
                   
                   {/* Left panel: List View of businesses */}
-                  <div className={`w-full md:w-1/2 h-full overflow-y-auto p-6 space-y-4 border-r border-border/40 ${
+                  <div className={`w-full md:w-1/2 h-full overflow-y-auto p-6 space-y-4 border-r border-neutral-100 dark:border-neutral-800 ${
                     mobileViewMode === 'list' ? 'block' : 'hidden md:block'
                   }`}>
                     {isLoading ? (
@@ -1667,20 +1672,20 @@ export function ResourcesPage() {
                             onClick={() => setSelectedProviderId(prov.id)}
                             className={`p-5 rounded-2xl transition-all border cursor-pointer flex flex-col justify-between group gap-4 ${
                               isSelected 
-                                ? 'bg-foreground/5 border-foreground/10 shadow-sm' 
-                                : 'bg-background border-border/50 hover:border-border hover:shadow-sm'
+                                ? 'bg-indigo-50/40 border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-900/60 shadow-sm' 
+                                : 'bg-neutral-50/50 border-neutral-150/80 hover:bg-white hover:border-neutral-300 dark:bg-neutral-900 dark:border-neutral-850 dark:hover:border-neutral-750'
                             }`}
                           >
                             <div className="flex gap-4">
                               <img 
                                 referrerPolicy="no-referrer"
                                 src={getBusinessPhoto(prov)} 
-                                className="w-16 h-16 object-cover rounded-xl border border-border/50 shrink-0"
+                                className="w-18 h-18 object-cover rounded-xl border border-neutral-200/60 dark:border-neutral-800 shrink-0"
                                 alt={prov.name} 
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-start gap-2">
-                                  <h4 className="font-medium text-sm text-foreground group-hover:text-muted-foreground transition-colors leading-snug">
+                                  <h4 className="font-bold text-sm text-neutral-900 dark:text-neutral-50 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-snug">
                                     {prov.name}
                                   </h4>
                                   <button
@@ -1689,56 +1694,56 @@ export function ResourcesPage() {
                                       e.stopPropagation();
                                       handleToggleSave(prov, 'provider');
                                     }}
-                                    className="text-muted-foreground hover:text-red-500 transition-colors p-1 shrink-0"
+                                    className="text-neutral-400 hover:text-red-500 transition-colors p-1 shrink-0"
                                   >
                                     <Heart className={`w-4 h-4 ${isSaved ? 'fill-red-500 text-red-500' : ''}`} />
                                   </button>
                                 </div>
 
-                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                  <Badge className="bg-foreground text-background border-transparent text-[9px] px-1.5 py-0 flex items-center gap-0.5 font-medium" variant="outline">
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400 text-[9px] px-1.5 py-0 flex items-center gap-0.5" variant="outline">
                                     <Sparkles className="w-2.5 h-2.5" />
                                     {prov.matchScore}% Match
                                   </Badge>
                                   {prov.openHours && prov.openHours !== "Closed" ? (
-                                    <Badge className="bg-success/10 text-success border-transparent text-[9px] px-1.5 py-0" variant="outline">Open Now</Badge>
+                                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-[9px] px-1.5 py-0" variant="outline">Open Now</Badge>
                                   ) : (
-                                    <Badge className="bg-destructive/10 text-destructive border-transparent text-[9px] px-1.5 py-0" variant="outline">Closed</Badge>
+                                    <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[9px] px-1.5 py-0" variant="outline">Closed</Badge>
                                   )}
-                                  <span className="text-[11px] font-medium text-muted-foreground">
+                                  <span className="text-[11px] text-neutral-400">
                                     {prov.categories[0] || "Specialist"}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                            <p className="text-xs text-neutral-500 line-clamp-2 leading-relaxed">
                               {prov.specialties.join(" • ")}
                             </p>
 
                             {prov.address && (
-                              <div className="flex items-center text-[11px] font-medium text-muted-foreground gap-1.5 mt-1 bg-muted/30 px-2.5 py-1.5 rounded-lg border border-border/50">
-                                <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
-                                <span className="truncate" title={prov.address}>{prov.address}</span>
+                              <div className="flex items-center text-[11px] text-neutral-500 dark:text-neutral-400 gap-1.5 mt-1 bg-neutral-100/50 dark:bg-neutral-800/30 px-2.5 py-1.5 rounded-xl">
+                                <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                <span className="truncate font-light" title={prov.address}>{prov.address}</span>
                               </div>
                             )}
 
-                            <div className="flex items-center justify-between text-xs pt-3 border-t border-border/40 mt-1">
-                              <div className="flex items-center gap-2">
-                                <span className="flex items-center text-foreground font-medium text-[11px]">
+                            <div className="flex items-center justify-between text-xs pt-3 border-t border-neutral-100 dark:border-neutral-800/80 mt-1">
+                              <div className="flex items-center gap-3">
+                                <span className="flex items-center text-amber-500 font-bold">
                                   <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {prov.rating}
                                 </span>
-                                <span className="text-muted-foreground text-[10px]">({prov.reviewsCount} reviews)</span>
+                                <span className="text-neutral-400">({prov.reviewsCount} reviews)</span>
                               </div>
                               
-                              <div className="flex items-center gap-2 font-medium text-foreground">
-                                <span className="flex items-center text-[10px] bg-muted/50 border border-border/50 px-2 py-1 rounded-md gap-1">
-                                  <Car className="w-3 h-3 text-muted-foreground" />
+                              <div className="flex items-center gap-2 font-semibold text-neutral-700 dark:text-neutral-300">
+                                <span className="flex items-center text-[10px] bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg gap-1">
+                                  <Car className="w-3 h-3 text-indigo-500" />
                                   {prov.distance.toFixed(1)} mi
                                 </span>
-                                <span className="flex items-center text-[10px] bg-muted/50 border border-border/50 px-2 py-1 rounded-md gap-1">
-                                  <Clock className="w-3 h-3 text-muted-foreground" />
-                                  {prov.driveTime} min
+                                <span className="flex items-center text-[10px] bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded-lg gap-1">
+                                  <Clock className="w-3 h-3 text-indigo-500" />
+                                  {prov.driveTime} min drive
                                 </span>
                               </div>
                             </div>
@@ -1749,54 +1754,54 @@ export function ResourcesPage() {
                   </div>
 
                   {/* Right panel: Live interactive OpenStreetMap via Leaflet container */}
-                  <div className={`w-full md:w-1/2 h-full bg-muted/10 relative ${
+                  <div className={`w-full md:w-1/2 h-full bg-neutral-100 dark:bg-neutral-900 relative ${
                     mobileViewMode === 'map' ? 'block' : 'hidden md:block'
                   }`}>
                     <div ref={mapContainerRef} className="w-full h-full z-0" />
 
                     {/* Quick Selected Provider Popover panel exactly like Airbnb */}
                     {selectedProvider && (
-                      <div className="absolute bottom-6 left-4 right-4 bg-background/95 backdrop-blur-md p-4 rounded-2xl border border-border/50 shadow-xl space-y-3 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
+                      <div className="absolute bottom-6 left-4 right-4 bg-white/95 dark:bg-neutral-950/95 backdrop-blur-md p-4 rounded-3xl border border-neutral-200 dark:border-neutral-850 shadow-2xl space-y-3 z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
                         <div className="flex justify-between items-start gap-4">
                           <div className="flex gap-3">
                             <img 
                               referrerPolicy="no-referrer"
                               src={getBusinessPhoto(selectedProvider)} 
-                              className="w-12 h-12 object-cover rounded-xl border border-border/50" 
+                              className="w-14 h-14 object-cover rounded-xl" 
                               alt={selectedProvider.name} 
                             />
                             <div>
-                              <Badge className="bg-foreground/5 text-foreground border-border/50 text-[9px] px-1.5 py-0 font-medium" variant="outline">
-                                {selectedProvider.matchScore}% Match
+                              <Badge className="bg-indigo-600/10 text-indigo-600 border-indigo-200 text-[9px] px-1.5 py-0" variant="outline">
+                                {selectedProvider.matchScore}% Best Match
                               </Badge>
-                              <h4 className="font-medium text-sm mt-1.5 text-foreground line-clamp-1">{selectedProvider.name}</h4>
-                              <p className="text-[10px] text-muted-foreground flex items-center mt-1">
-                                <MapPin className="w-3 h-3 mr-0.5 text-muted-foreground shrink-0" /> <span className="line-clamp-1" title={selectedProvider.address}>{selectedProvider.address}</span>
+                              <h4 className="font-bold text-sm mt-1 text-neutral-900 dark:text-neutral-50 line-clamp-1">{selectedProvider.name}</h4>
+                              <p className="text-[11px] text-neutral-500 flex items-center mt-1">
+                                <MapPin className="w-3 h-3 mr-0.5 text-indigo-500 shrink-0" /> <span className="line-clamp-1" title={selectedProvider.address}>{selectedProvider.address}</span>
                               </p>
                             </div>
                           </div>
                           
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-medium text-foreground flex items-center justify-end">
-                              <Star className="w-3 h-3 mr-1 fill-current" /> {selectedProvider.rating}
+                            <span className="text-xs font-bold text-amber-500 flex items-center justify-end">
+                              <Star className="w-3.5 h-3.5 mr-0.5 fill-current" /> {selectedProvider.rating}
                             </span>
-                            <span className="text-[10px] text-muted-foreground font-medium block mt-1">{selectedProvider.distance.toFixed(1)} miles away</span>
+                            <span className="text-[10px] text-neutral-400 font-semibold block mt-1">{selectedProvider.distance.toFixed(1)} miles away</span>
                           </div>
                         </div>
 
-                        <div className="flex gap-2 pt-2 border-t border-border/40 mt-2">
+                        <div className="flex gap-2 pt-1">
                           <a 
                             href={`tel:${selectedProvider.phone}`}
-                            className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-foreground text-background font-medium text-xs hover:opacity-90 active:scale-95 transition-all"
+                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl bg-black dark:bg-neutral-50 text-white dark:text-black font-bold text-xs hover:opacity-90 active:scale-[0.98] transition-all"
                           >
-                            <Phone className="w-3.5 h-3.5" /> Call
+                            <Phone className="w-3.5 h-3.5" /> Call {selectedProvider.phone}
                           </a>
                           {selectedProvider.website && (
                             <a 
                               href={selectedProvider.website}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="h-9 w-12 flex items-center justify-center rounded-lg border border-border/50 text-muted-foreground hover:bg-muted/50 hover:text-foreground active:scale-95 transition-all"
+                              className="h-10 w-10 flex items-center justify-center rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 active:scale-[0.98] transition-all"
                             >
                               <ExternalLink className="w-4 h-4" />
                             </a>
@@ -1834,42 +1839,42 @@ export function ResourcesPage() {
                       
                       {/* Saved Local Specialists */}
                       {savedItems.some(i => i.type === 'provider') && (
-                        <div className="space-y-4">
-                          <h4 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5" /> Saved Specialists
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold uppercase tracking-widest text-neutral-400 flex items-center gap-2">
+                            <MapPin className="w-3.5 h-3.5" /> Saved Contractors & Pros
                           </h4>
-                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div className="grid sm:grid-cols-2 gap-4">
                             {savedItems
                               .filter(i => i.type === 'provider')
                               .map(item => {
                                 const prov = item.resourceData;
                                 return (
-                                  <div key={item.firestoreId} className="p-5 rounded-2xl bg-card border border-border/50 flex flex-col justify-between gap-3 shadow-sm hover:border-border transition-colors">
+                                  <div key={item.firestoreId} className="p-5 rounded-2xl bg-neutral-50/50 dark:bg-neutral-900 border border-neutral-150 dark:border-neutral-800 flex flex-col justify-between gap-3">
                                     <div className="flex justify-between items-start gap-3">
-                                      <h4 className="font-medium text-sm text-foreground leading-tight">{prov.name}</h4>
+                                      <h4 className="font-bold text-sm text-neutral-900 dark:text-neutral-50 leading-tight">{prov.name}</h4>
                                       <button 
                                         id={`unsave-prov-${item.firestoreId}`}
                                         onClick={() => handleToggleSave(prov, 'provider')}
-                                        className="text-muted-foreground hover:text-red-500 transition-colors p-1 shrink-0"
+                                        className="text-red-500 hover:text-red-650 p-1 shrink-0"
                                       >
-                                        <Heart className="w-4 h-4 fill-red-500 text-red-500" />
+                                        <Heart className="w-4 h-4 fill-red-500" />
                                       </button>
                                     </div>
-                                    <p className="text-[11px] text-muted-foreground line-clamp-2">{prov.specialties?.join(" • ")}</p>
+                                    <p className="text-xs text-neutral-400 line-clamp-2">{prov.specialties?.join(" • ")}</p>
                                     
                                     {prov.address && (
-                                      <div className="flex items-center text-[11px] font-medium text-muted-foreground gap-1.5 mt-1 bg-muted/30 px-2 py-1.5 rounded-lg border border-border/50">
-                                        <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
-                                        <span className="truncate" title={prov.address}>{prov.address}</span>
+                                      <div className="flex items-center text-[11px] text-neutral-500 dark:text-neutral-400 gap-1 mt-0.5">
+                                        <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                        <span className="truncate font-light" title={prov.address}>{prov.address}</span>
                                       </div>
                                     )}
                                     
-                                    <div className="flex items-center justify-between text-xs pt-3 border-t border-border/40 mt-1">
-                                      <span className="flex items-center text-foreground font-medium text-[11px]">
-                                        <Star className="w-3.5 h-3.5 mr-1 fill-current" /> {prov.rating}
+                                    <div className="flex items-center justify-between text-xs pt-3 border-t border-neutral-100 dark:border-neutral-800/80 mt-1">
+                                      <span className="flex items-center text-amber-500 font-bold">
+                                        <Star className="w-3.5 h-3.5 mr-0.5 fill-current" /> {prov.rating}
                                       </span>
-                                      <a href={`tel:${prov.phone}`} className="text-foreground font-medium text-[11px] flex items-center gap-1.5 hover:underline">
-                                        <Phone className="w-3 h-3" /> Call
+                                      <a href={`tel:${prov.phone}`} className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-1 hover:underline">
+                                        <Phone className="w-3 h-3" /> Call Pro
                                       </a>
                                     </div>
                                   </div>

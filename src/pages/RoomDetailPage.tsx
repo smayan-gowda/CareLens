@@ -131,20 +131,20 @@ export function RoomDetailPage() {
         </Button>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-8">
+      <div className="grid md:grid-cols-3 gap-12">
         
         {/* Left Col: Scans & History */}
         <div className="md:col-span-2 space-y-8">
            <h2 className="text-2xl font-medium tracking-tight">Assessment History</h2>
            
-           <div className="space-y-4">
+           <div className="space-y-6">
               {roomScans.length === 0 ? (
-                <div className="bg-neutral-50 dark:bg-neutral-900 rounded-3xl p-12 text-center border border-neutral-200 dark:border-neutral-800">
-                  <div className="w-16 h-16 bg-white dark:bg-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                <div className="bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] p-12 text-center border border-black/5 dark:border-white/5">
+                  <div className="w-16 h-16 bg-white dark:bg-black rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
                     <Camera className="w-6 h-6 text-neutral-400" />
                   </div>
                   <h3 className="font-medium text-lg mb-2">No assessments yet</h3>
-                  <p className="text-neutral-500 text-sm mb-6 max-w-xs mx-auto">Run a technical scan to identify environmental hazards.</p>
+                  <p className="text-neutral-500 text-sm mb-6 max-w-xs mx-auto font-light">Run a technical scan to identify environmental hazards.</p>
                 </div>
               ) : (
                 roomScans.map((scan) => (
@@ -152,9 +152,9 @@ export function RoomDetailPage() {
                     key={scan.id}
                     whileHover={{ scale: 1.01 }}
                     onClick={() => navigate(`/properties/${home.id}/rooms/${room.id}/assessments/${scan.id}`)}
-                    className="group cursor-pointer bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-4 flex gap-6 shadow-sm hover:shadow-xl transition-all duration-300"
+                    className="group cursor-pointer bg-card border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] rounded-[2rem] p-5 flex gap-6 hover:shadow-xl transition-all duration-300"
                   >
-                     <div className="w-32 h-32 rounded-2xl bg-neutral-100 dark:bg-neutral-800 overflow-hidden shrink-0 relative">
+                     <div className="w-32 h-32 rounded-2xl bg-neutral-100 dark:bg-neutral-800 overflow-hidden shrink-0 relative border border-black/5 dark:border-white/5">
                         {scan.images?.[0] || (scan as any).originalImage ? (
                           <img src={scan.images?.[0] || (scan as any).originalImage} className="w-full h-full object-cover grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500" />
                         ) : (
@@ -167,11 +167,11 @@ export function RoomDetailPage() {
                         <div>
                           <div className="flex justify-between items-start mb-1">
                              <h3 className="font-medium text-lg">Environmental Audit</h3>
-                             <div className="w-8 h-8 rounded-full bg-neutral-50 dark:bg-neutral-800 flex items-center justify-center group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black transition-colors">
-                                <ChevronRight className="w-4 h-4" />
+                             <div className="w-10 h-10 rounded-full bg-neutral-50 dark:bg-neutral-800 flex items-center justify-center group-hover:bg-foreground group-hover:text-background transition-colors">
+                                <ChevronRight className="w-5 h-5" />
                              </div>
                           </div>
-                          <p className="text-sm text-neutral-500">{format(scan.createdAt, 'MMMM d, yyyy')}</p>
+                          <p className="text-sm text-muted-foreground font-light">{format(scan.createdAt, 'MMMM d, yyyy')}</p>
                         </div>
                         <div className="flex items-center gap-4">
                            <span className="text-sm font-medium">{scan.hazards.length} Findings</span>
@@ -195,7 +195,7 @@ export function RoomDetailPage() {
                 room.images.map((img) => (
                   <div 
                     key={img.id} 
-                    className="aspect-square rounded-2xl overflow-hidden cursor-pointer relative group bg-neutral-100 dark:bg-neutral-800"
+                    className="aspect-square rounded-[1.5rem] overflow-hidden cursor-pointer relative group bg-neutral-100 dark:bg-neutral-800 border border-black/5 dark:border-white/5 shadow-sm"
                     onClick={() => setSelectedImage(img.url)}
                   >
                     <img src={img.url} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -203,9 +203,9 @@ export function RoomDetailPage() {
                   </div>
                 ))
               ) : (
-                <div className="col-span-2 bg-neutral-50 dark:bg-neutral-900 rounded-3xl p-8 text-center border border-neutral-200 dark:border-neutral-800">
+                <div className="col-span-2 bg-card rounded-[2.5rem] p-8 text-center border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)]">
                   <ImageIcon className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
-                  <p className="text-sm text-neutral-500">No reference photos</p>
+                  <p className="text-sm text-neutral-500 font-light">No reference photos</p>
                 </div>
               )}
            </div>

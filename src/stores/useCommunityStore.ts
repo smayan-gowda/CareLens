@@ -10,7 +10,9 @@ import {
   increment,
   serverTimestamp,
   deleteDoc,
-  where
+  where,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { db, cleanUndefined } from '@/lib/firebase';
 import { CommunityPost, CommunityComment } from '@/types/home';
@@ -21,7 +23,8 @@ interface CommunityState {
   subscribePosts: () => () => void;
   subscribeComments: (postId: string) => () => void;
   addPost: (post: Omit<CommunityPost, 'id' | 'likes' | 'commentCount' | 'timestamp'>) => Promise<void>;
-  likePost: (postId: string) => Promise<void>;
+  likePost: (postId: string, userId: string) => Promise<void>;
+  likeComment: (commentId: string, userId: string) => Promise<void>;
   addComment: (comment: Omit<CommunityComment, 'id' | 'timestamp'>) => Promise<void>;
   deletePost: (postId: string) => Promise<void>;
 }
@@ -69,21 +72,57 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
     await addDoc(collection(db, 'posts'), cleanUndefined({
       ...postData,
       likes: 0,
+      likedBy: [],
       commentCount: 0,
       timestamp: serverTimestamp()
     }));
   },
 
-  likePost: async (postId) => {
+  likePost: async (postId, userId) => {
+    const post = get().posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const hasLiked = post.likedBy?.includes(userId);
     const postRef = doc(db, 'posts', postId);
-    await updateDoc(postRef, cleanUndefined({
-      likes: increment(1)
-    }));
+    
+    if (hasLiked) {
+      await updateDoc(postRef, cleanUndefined({
+        likes: increment(-1),
+        likedBy: arrayRemove(userId)
+      }));
+    } else {
+      await updateDoc(postRef, cleanUndefined({
+        likes: increment(1),
+        likedBy: arrayUnion(userId)
+      }));
+    }
+  },
+
+  likeComment: async (commentId, userId) => {
+    const comment = get().comments.find(c => c.id === commentId);
+    if (!comment) return;
+
+    const hasLiked = comment.likedBy?.includes(userId);
+    const commentRef = doc(db, 'comments', commentId);
+    
+    if (hasLiked) {
+      await updateDoc(commentRef, cleanUndefined({
+        likes: increment(-1),
+        likedBy: arrayRemove(userId)
+      }));
+    } else {
+      await updateDoc(commentRef, cleanUndefined({
+        likes: increment(1),
+        likedBy: arrayUnion(userId)
+      }));
+    }
   },
 
   addComment: async (commentData) => {
     await addDoc(collection(db, 'comments'), cleanUndefined({
       ...commentData,
+      likes: 0,
+      likedBy: [],
       timestamp: serverTimestamp()
     }));
     

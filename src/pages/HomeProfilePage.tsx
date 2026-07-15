@@ -108,7 +108,7 @@ export function HomeProfilePage() {
       </div>
 
       {/* Grid Content */}
-      <div className="grid md:grid-cols-3 gap-8">
+      <div className="grid md:grid-cols-3 gap-12">
         
         {/* Main Content (Rooms) */}
         <div className="md:col-span-2 space-y-8">
@@ -116,21 +116,21 @@ export function HomeProfilePage() {
             <h2 className="text-2xl font-medium tracking-tight">Zones</h2>
             <Button 
               onClick={() => navigate(`/properties/${home.id}/rooms/new`)}
-              className="rounded-full bg-black text-white px-6 shadow-md transition-transform hover:scale-105"
+              className="rounded-full bg-foreground text-background px-6 shadow-md transition-all active:scale-95"
             >
               <Plus className="w-4 h-4 mr-2" /> Add Zone
             </Button>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-6">
             {visibleRooms.length === 0 ? (
-              <div className="sm:col-span-2 bg-neutral-50 dark:bg-neutral-900 rounded-3xl p-12 text-center border border-neutral-200 dark:border-neutral-800">
-                <div className="w-16 h-16 bg-neutral-200 dark:bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="sm:col-span-2 bg-neutral-50 dark:bg-neutral-900 rounded-[2.5rem] p-12 text-center border border-black/5 dark:border-white/5">
+                <div className="w-16 h-16 bg-neutral-200 dark:bg-neutral-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <Plus className="w-6 h-6 text-neutral-400" />
                 </div>
                 <h3 className="font-medium text-lg mb-2">No zones configured</h3>
-                <p className="text-neutral-500 text-sm mb-6">Add rooms to this property to begin scanning for hazards.</p>
-                <Button onClick={() => navigate(`/properties/${home.id}/rooms/new`)} variant="outline" className="rounded-full">Add First Zone</Button>
+                <p className="text-neutral-500 text-sm mb-6 font-light">Add rooms to this property to begin scanning for hazards.</p>
+                <Button onClick={() => navigate(`/properties/${home.id}/rooms/new`)} variant="outline" className="rounded-full font-medium">Add First Zone</Button>
               </div>
             ) : (
               visibleRooms.map(room => (
@@ -138,18 +138,18 @@ export function HomeProfilePage() {
                   key={room.id}
                   whileHover={{ scale: 1.02 }}
                   onClick={() => navigate(`/properties/${home.id}/rooms/${room.id}`)}
-                  className="group cursor-pointer bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all duration-300"
+                  className="group cursor-pointer bg-card border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] rounded-[2rem] p-8 transition-all duration-300"
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
-                       <ImageIcon className="w-5 h-5 text-neutral-400" />
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center border border-black/5 dark:border-white/5">
+                       <ImageIcon className="w-6 h-6 text-neutral-400" />
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-neutral-50 dark:bg-neutral-800 flex items-center justify-center group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black transition-colors">
-                      <ChevronRight className="w-4 h-4" />
+                    <div className="w-10 h-10 rounded-full bg-neutral-50 dark:bg-neutral-800 flex items-center justify-center group-hover:bg-foreground group-hover:text-background transition-colors">
+                      <ChevronRight className="w-5 h-5" />
                     </div>
                   </div>
                   <h3 className="font-medium text-xl tracking-tight mb-1">{room.name}</h3>
-                  <p className="text-sm text-neutral-500 capitalize">{room.type}</p>
+                  <p className="text-sm text-muted-foreground capitalize font-light">{room.type}</p>
                 </motion.div>
               ))
             )}
@@ -158,22 +158,22 @@ export function HomeProfilePage() {
 
         {/* Sidebar Info */}
         <div className="space-y-6">
-           <div className="bg-white dark:bg-neutral-900 rounded-3xl p-6 border border-neutral-200 dark:border-neutral-800 shadow-sm">
-             <h3 className="font-medium mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-neutral-400" /> Details
+           <div className="bg-card rounded-[2.5rem] p-8 border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)]">
+             <h3 className="font-medium mb-6 flex items-center gap-2 text-lg tracking-tight">
+                <Activity className="w-5 h-5 text-muted-foreground" /> Details
              </h3>
-             <dl className="space-y-4 text-sm">
+             <dl className="space-y-6 text-sm">
                <div>
-                 <dt className="text-neutral-500">Property Nickname</dt>
-                 <dd className="font-medium mt-1">{home.nickname || "—"}</dd>
+                 <dt className="text-muted-foreground font-light text-xs uppercase tracking-widest mb-1">Property Nickname</dt>
+                 <dd className="font-medium text-base">{home.nickname || "—"}</dd>
                </div>
-               <div className="pt-4 border-t border-neutral-100 dark:border-neutral-800">
-                 <dt className="text-neutral-500">Added On</dt>
-                 <dd className="font-medium mt-1">{format(home.createdAt, 'MMMM d, yyyy')}</dd>
+               <div className="pt-4 border-t border-black/5 dark:border-white/5">
+                 <dt className="text-muted-foreground font-light text-xs uppercase tracking-widest mb-1">Added On</dt>
+                 <dd className="font-medium text-base">{format(home.createdAt, 'MMMM d, yyyy')}</dd>
                </div>
-               <div className="pt-4 border-t border-neutral-100 dark:border-neutral-800">
-                 <dt className="text-neutral-500">Total Zones</dt>
-                 <dd className="font-medium mt-1">{visibleRooms.length}</dd>
+               <div className="pt-4 border-t border-black/5 dark:border-white/5">
+                 <dt className="text-muted-foreground font-light text-xs uppercase tracking-widest mb-1">Total Zones</dt>
+                 <dd className="font-medium text-base">{visibleRooms.length}</dd>
                </div>
              </dl>
            </div>
