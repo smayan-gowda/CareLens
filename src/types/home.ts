@@ -69,6 +69,7 @@ export interface TimelineEvent {
   id: string;
   userId: string;
   homeId: string;
+  roomId?: string;
   type: TimelineEventType;
   title: string;
   description: string;

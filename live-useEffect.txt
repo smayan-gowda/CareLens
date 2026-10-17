@@ -1,0 +1,191 @@
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  const [isConnected, setIsConnected] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [videoMuted, setVideoMuted] = useState(false);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  
+  const inputAudioCtxRef = useRef<AudioContext | null>(null);
+  const outputAudioCtxRef = useRef<AudioContext | null>(null);
+  const nextStartTimeRef = useRef<number>(0);
+  
+  const videoIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let ws: WebSocket | undefined;
+    
+    let isActive = true;
+    async function startSession() {
+      try {
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: true, 
+            video: { facingMode } 
+          });
+        } catch (e) {
+          // Fallback if the specific facingMode is not available (like on desktop)
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: true, 
+            video: true 
+          });
+        }
+        streamRef.current = stream;
+        const currentStream = stream;
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          // videoRef.current.play().catch(console.error); // This could cause problems if autoplay is already on
+        }
+
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const newWs = new WebSocket(`${protocol}//${window.location.host}/api/live-walkthrough`);
+        ws = newWs;
+        wsRef.current = newWs;
+        const currentWs = newWs;
+
+        const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        inputAudioCtxRef.current = inputCtx;
+        const currentInputCtx = inputCtx;
+        outputAudioCtxRef.current = outputCtx;
+        const currentOutputCtx = outputCtx;
+
+        const source = inputCtx.createMediaStreamSource(stream);
+        const processor = inputCtx.createScriptProcessor(4096, 1, 1);
+        source.connect(processor);
+        processor.connect(inputCtx.destination);
+        
+        // Disable initially if state says so
+        stream.getAudioTracks()[0].enabled = !micMuted;
+        stream.getVideoTracks()[0].enabled = !videoMuted;
+
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState === WebSocket.OPEN && !micMutedRef.current) {
+            const base64 = pcmToBase64(e.inputBuffer.getChannelData(0));
+            ws.send(JSON.stringify({ audio: base64 }));
+          }
+        };
+
+        ws.onopen = () => {
+          if (!isActive) return;
+          // Send an initial client message to wake up the AI
+          ws.send(JSON.stringify({ text: "Hello! I am ready to do the live walkthrough. I am showing you my environment." }));
+          setIsConnected(true);
+          toast.success("Live Walkthrough Started", {
+            description: "CareLens is now viewing your space and listening."
+          });
+          
+          // Send video frames at 1 frame per second
+          const intervalId = window.setInterval(() => {
+          videoIntervalRef.current = intervalId;
+            if (isActive && ws.readyState === WebSocket.OPEN && videoRef.current && canvasRef.current && !videoMutedRef.current) {
+              const video = videoRef.current;
+              const canvas = canvasRef.current;
+              const ctx = canvas.getContext('2d');
+              if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+                // Resize for smaller payload
+                const targetWidth = 640;
+                const scale = targetWidth / video.videoWidth;
+                const targetHeight = video.videoHeight * scale;
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+                const jpegBase64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                ws.send(JSON.stringify({ video: jpegBase64 }));
+              }
+            }
+          }, 1000);
+        };
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.audio) {
+            playAudioChunk(outputCtx, msg.audio);
+          }
+          if (msg.interrupted) {
+            // clear audio queue if needed
+            nextStartTimeRef.current = outputCtx.currentTime;
+          }
+        };
+
+        ws.onerror = () => {
+          toast.error("Connection error");
+        };
+
+        ws.onclose = (event) => {
+          if (!isActive) return; // Ignore if unmounted
+          console.log('WebSocket closed', event);
+          if (wsRef.current !== ws) return; // Only cleanup if this is the active websocket
+          console.log('WebSocket closed', event);
+          setIsConnected(false);
+          cleanup();
+          if (event.code !== 1000) {
+            toast.error('Session ended prematurely. ' + (event.reason || ''));
+          }
+        };
+
+      } catch (err) {
+        console.error("Error accessing media devices.", err);
+        toast.error("Camera/Microphone access denied. If you are in the AI Studio preview, please open the app in a new tab (click the icon in the top right).");
+      }
+    }
+    
+    startSession();
+
+    return () => {
+      isActive = false;
+      if (ws) ws.close();
+    };
+  }, []);
+  
+  // Use refs for callbacks
+  const micMutedRef = useRef(micMuted);
+  const videoMutedRef = useRef(videoMuted);
+  useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
+  useEffect(() => { videoMutedRef.current = videoMuted; }, [videoMuted]);
+
+  function playAudioChunk(ctx: AudioContext, base64: string) {
+    if (ctx.state === 'suspended') {
+        ctx.resume();
+    }
+    const pcm = base64ToPcm(base64);
+    const buffer = ctx.createBuffer(1, pcm.length, 24000);
+    buffer.copyToChannel(pcm, 0);
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    
+    const currTime = ctx.currentTime;
+    if (nextStartTimeRef.current < currTime) {
+        nextStartTimeRef.current = currTime;
+    }
+    source.start(nextStartTimeRef.current);
+    nextStartTimeRef.current += buffer.duration;
+  }
+
+  function cleanup(specificWs?: WebSocket, specificStream?: MediaStream, specificInterval?: number) {
+    if (specificInterval) clearInterval(specificInterval);
+    else if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+    
+    if (specificWs) specificWs.close();
+    else if (wsRef.current) wsRef.current.close();
+    
+    if (specificStream) {
+      specificStream.getTracks().forEach(t => t.stop());
+    } else if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+    }
+    
+    if (inputAudioCtxRef.current && inputAudioCtxRef.current.state !== 'closed') {
+      inputAudioCtxRef.current.close();
+    }
+    if (outputAudioCtxRef.current && outputAudioCtxRef.current.state !== 'closed') {
+      outputAudioCtxRef.current.close();
+    }
+  }
+

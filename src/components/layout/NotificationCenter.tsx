@@ -1,4 +1,3 @@
-
 import { useHomeStore } from "@/stores/useHomeStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import {
@@ -6,9 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
 import { Bell, Check, Clock, FileText, TrendingUp, Zap, MessageSquare } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,85 +17,68 @@ export function NotificationCenter() {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'report': return <FileText className="h-4 w-4 text-blue-500" />;
-      case 'score': return <TrendingUp className="h-4 w-4 text-emerald-500" />;
-      case 'recommendation': return <Zap className="h-4 w-4 text-purple-500" />;
-      case 'resource': return <Clock className="h-4 w-4 text-amber-500" />;
-      case 'community': return <MessageSquare className="h-4 w-4 text-primary" />;
-      default: return <Bell className="h-4 w-4" />;
+      case 'report': return <FileText className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />;
+      case 'score': return <TrendingUp className="h-3.5 w-3.5 text-success" strokeWidth={1.75} />;
+      case 'recommendation': return <Zap className="h-3.5 w-3.5 text-brand" strokeWidth={1.75} />;
+      case 'resource': return <Clock className="h-3.5 w-3.5 text-warning" strokeWidth={1.75} />;
+      case 'community': return <MessageSquare className="h-3.5 w-3.5 text-foreground" strokeWidth={1.75} />;
+      default: return <Bell className="h-3.5 w-3.5" strokeWidth={1.75} />;
     }
   };
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full hover:bg-muted/60 transition-colors">
-          <Bell className="h-5 w-5" />
+        <button className="relative w-9 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <Bell className="h-[18px] w-[18px]" strokeWidth={1.6} />
           {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-background"></span>
-            </span>
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-brand" />
           )}
           <span className="sr-only">Notifications</span>
-        </Button>
+        </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0 shadow-xl border-border/60" align="end">
-        <div className="flex items-center justify-between p-4 border-b border-border/40 bg-muted/10">
+      <PopoverContent className="w-80 p-0 rounded-md border-border shadow-[var(--elevation-lifted)]" align="end">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-border">
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-sm">Notifications</h3>
-            {unreadCount > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-primary/10 text-primary border-none">
-                {unreadCount} New
-              </Badge>
-            )}
+            <span className="font-semibold text-sm">Notifications</span>
+            {unreadCount > 0 && <span className="field-tag text-brand">{unreadCount} new</span>}
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-8 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-primary"
+          <button
+            className="field-tag text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => user && clearNotifications(user.uid)}
           >
-            Clear All
-          </Button>
+            Clear all
+          </button>
         </div>
         <ScrollArea className="h-[380px]">
           {notifications.length > 0 ? (
-            <div className="divide-y divide-border/40">
+            <div>
               {notifications.map((notification) => (
-                <div 
+                <div
                   key={notification.id}
-                  className={`p-4 hover:bg-muted/30 transition-colors cursor-pointer group relative ${!notification.isRead ? 'bg-primary/[0.02]' : ''}`}
+                  className={`p-4 hover:bg-muted/30 transition-colors cursor-pointer group relative border-b border-border last:border-b-0 ${!notification.isRead ? 'bg-brand/[0.03]' : ''}`}
                   onClick={() => markNotificationRead(notification.id)}
                 >
                   <div className="flex gap-3">
-                    <div className="mt-0.5 h-8 w-8 rounded-full bg-background border border-border/40 flex items-center justify-center shrink-0 shadow-sm group-hover:border-primary/30 transition-all">
+                    <div className="mt-0.5 h-7 w-7 rounded-sm border border-border flex items-center justify-center shrink-0">
                       {getIcon(notification.type)}
                     </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <p className={`text-sm leading-none ${!notification.isRead ? 'font-bold' : 'font-medium'}`}>
-                          {notification.title}
-                        </p>
-                        <time className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true })}
-                        </time>
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-sm leading-none truncate ${!notification.isRead ? 'font-semibold' : 'font-medium'}`}>{notification.title}</p>
+                        <time className="tabular text-[10px] text-muted-foreground shrink-0">{formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true })}</time>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                        {notification.message}
-                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{notification.message}</p>
                       {notification.link && (
-                        <Button variant="link" className="h-auto p-0 text-[10px] font-bold text-primary" asChild>
-                          <Link to={notification.link}>View details</Link>
-                        </Button>
+                        <Link to={notification.link} className="field-tag text-brand hover:underline inline-block">View details</Link>
                       )}
                     </div>
                   </div>
                   {!notification.isRead && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full bg-background border border-border/60">
-                        <Check className="h-3 w-3 text-emerald-500" />
-                      </Button>
+                      <span className="h-6 w-6 rounded-sm border border-border flex items-center justify-center">
+                        <Check className="h-3 w-3 text-success" />
+                      </span>
                     </div>
                   )}
                 </div>
@@ -106,20 +86,16 @@ export function NotificationCenter() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full py-12 px-8 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted/30 flex items-center justify-center mb-4">
-                <Bell className="h-6 w-6 text-muted-foreground/30" />
-              </div>
+              <Bell className="h-5 w-5 text-muted-foreground/30 mb-4" strokeWidth={1.5} />
               <h4 className="text-sm font-medium">No notifications yet</h4>
-              <p className="text-xs text-muted-foreground mt-1">
-                We'll notify you here when your safety reports are ready.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">We'll notify you here when your safety reports are ready.</p>
             </div>
           )}
         </ScrollArea>
-        <div className="p-3 border-t border-border/40 bg-muted/5">
-          <Button variant="ghost" className="w-full text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary h-8" asChild>
-            <Link to="/settings">Notification Settings</Link>
-          </Button>
+        <div className="p-2 border-t border-border">
+          <Link to="/settings" className="field-tag text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center h-9">
+            Notification Settings
+          </Link>
         </div>
       </PopoverContent>
     </Popover>

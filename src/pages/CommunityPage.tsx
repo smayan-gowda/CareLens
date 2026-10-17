@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,7 +11,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -24,11 +23,10 @@ import {
 import { 
   MessageSquare, 
   Search, 
-  Users, 
   Heart,
-  Plus,
   Loader2,
-  Send
+  Send,
+  Sparkles
 } from "lucide-react";
 import { useCommunityStore } from '@/stores/useCommunityStore';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -36,12 +34,14 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { CommunityPost } from '@/types/home';
 
+const HERO_IMAGE = "https://images.unsplash.com/photo-1758273241078-8eec353836be?q=80&w=2400&auto=format&fit=crop";
+
 export function CommunityPage() {
   const { posts, comments, addPost, subscribePosts, subscribeComments, likePost, likeComment, addComment } = useCommunityStore();
   const { user } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
-  
+
   // New Discussion state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +55,7 @@ export function CommunityPage() {
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [likedPulse, setLikedPulse] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribePosts();
@@ -70,18 +71,31 @@ export function CommunityPage() {
 
   const categories = ['All', 'Home Safety', 'Caregiving', 'Accessibility', 'Technology', 'General'];
 
-  const filteredPosts = posts.filter(post => 
+  const sortedPosts = useMemo(
+    () => [...posts].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    [posts]
+  );
+
+  // The most-discussed recent post, curated as a single featured entry —
+  // not an algorithmic ranking, just "the conversation most worth reading."
+  const featuredPost = useMemo(() => {
+    if (sortedPosts.length === 0) return null;
+    return [...sortedPosts].sort((a, b) => (b.likes + b.commentCount * 2) - (a.likes + a.commentCount * 2))[0];
+  }, [sortedPosts]);
+
+  const filteredPosts = sortedPosts.filter(post =>
+    post.id !== featuredPost?.id &&
     (activeCategory === 'All' || post.category === activeCategory) &&
-    (post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    post.content.toLowerCase().includes(searchQuery.toLowerCase()))
-  ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    (post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.content.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const handleCreateDiscussion = async () => {
     if (!newPost.title.trim() || !newPost.content.trim()) {
       toast.error('Please fill in all fields');
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       await addPost({
@@ -94,7 +108,7 @@ export function CommunityPage() {
       });
       setIsDialogOpen(false);
       setNewPost({ title: '', content: '', category: 'General' });
-      toast.success('Discussion created successfully');
+      toast.success('Shared with the community');
     } catch (error) {
       console.error('Failed to create post', error);
       toast.error('Failed to create discussion');
@@ -109,6 +123,8 @@ export function CommunityPage() {
       toast.error('Please sign in to like posts');
       return;
     }
+    setLikedPulse(postId);
+    setTimeout(() => setLikedPulse(null), 400);
     try {
       await likePost(postId, user.uid);
     } catch (error) {
@@ -141,7 +157,6 @@ export function CommunityPage() {
         content: newComment.trim()
       });
       setNewComment('');
-      toast.success('Comment added');
     } catch (error) {
       toast.error('Failed to add comment');
     } finally {
@@ -151,249 +166,290 @@ export function CommunityPage() {
 
   const currentComments = comments.filter(c => c.postId === selectedPost?.id);
 
+  const openComposer = () => setIsDialogOpen(true);
+
   return (
-    <div className="max-w-7xl mx-auto space-y-12 pb-12">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 max-w-5xl mx-auto mb-12">
-        <div>
-          <h1 className="text-4xl font-medium tracking-tight mb-2">Caregiver Network</h1>
-          <p className="text-neutral-500 text-lg font-light max-w-xl">Connect with professionals and families managing environmental safety.</p>
+    <div>
+      {/* ===== Hero — warm, editorial, photographic ===== */}
+      <div className="relative w-screen left-1/2 -ml-[50vw] h-[46vh] min-h-[340px] overflow-hidden bg-neutral-900 photo-vignette -mt-8 md:-mt-10">
+        <img src={HERO_IMAGE} alt="" className="w-full h-full object-cover" />
+        <div className="relative z-10 h-full flex flex-col justify-end px-5 md:px-10 pb-12 md:pb-14 max-w-[1200px] mx-auto">
+          <span className="field-tag text-white/50 mb-4 block">Caregiver Network</span>
+          <h1 className="narrative text-white text-5xl md:text-7xl text-balance mb-3">Community wisdom.</h1>
+          <p className="text-white/65 text-base md:text-lg max-w-lg">Learn from caregivers facing the same challenges — and share what you've learned along the way.</p>
         </div>
+      </div>
+
+      <div className="max-w-[1200px] mx-auto px-5 md:px-10 pt-10 md:pt-14">
+        {/* ===== Composer entry point — inviting, not a small button ===== */}
+        <button
+          onClick={openComposer}
+          className="w-full flex items-center gap-4 text-left py-5 px-6 border border-border hover:border-brand/40 transition-colors mb-10 group"
+        >
+          <Avatar className="h-10 w-10 rounded-full border border-border shrink-0">
+            <AvatarImage src={user?.photoURL || undefined} />
+            <AvatarFallback className="rounded-full">{(user?.displayName || 'A').substring(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <span className="text-muted-foreground group-hover:text-foreground transition-colors text-base">
+            What would you like to share today?
+          </span>
+        </button>
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full bg-foreground text-background px-8 h-12 shadow-md transition-all active:scale-95 shrink-0 text-base font-medium">
-               <Plus className="w-5 h-5 mr-2" /> New Discussion
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] rounded-[2rem] p-8 border border-black/5 dark:border-white/5 shadow-2xl">
+          <DialogContent className="sm:max-w-[600px] rounded-md p-8 border border-border">
             <DialogHeader className="mb-6">
-              <DialogTitle className="text-2xl font-medium tracking-tight">Start a Discussion</DialogTitle>
-              <DialogDescription className="text-base font-light mt-2">
-                Share your experience or ask a question to the community.
+              <DialogTitle className="narrative text-3xl">What's on your mind?</DialogTitle>
+              <DialogDescription className="text-base mt-2">
+                Share your experience or ask a question — someone here has likely faced it too.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Category</Label>
-                <Select 
-                  value={newPost.category} 
-                  onValueChange={(val: any) => setNewPost({...newPost, category: val})}
+                <Label className="field-tag text-muted-foreground">Category</Label>
+                <Select
+                  value={newPost.category}
+                  onValueChange={(val: any) => setNewPost({ ...newPost, category: val })}
                 >
-                  <SelectTrigger className="w-full h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl shadow-none text-base pl-4">
+                  <SelectTrigger className="w-full h-11">
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl border border-border shadow-xl">
+                  <SelectContent className="rounded-md border border-border shadow-xl">
                     {categories.filter(c => c !== 'All').map(cat => (
-                      <SelectItem key={cat} value={cat} className="py-3 rounded-xl">{cat}</SelectItem>
+                      <SelectItem key={cat} value={cat} className="py-3 rounded-md">{cat}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Title</Label>
-                <Input 
+                <Label className="field-tag text-muted-foreground">Title</Label>
+                <Input
                   value={newPost.title}
-                  onChange={(e) => setNewPost({...newPost, title: e.target.value})}
-                  placeholder="e.g. Recommendations for bathroom grab bars?" 
-                  className="h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl shadow-none text-base px-4"
+                  onChange={(e) => setNewPost({ ...newPost, title: e.target.value })}
+                  placeholder="e.g. Recommendations for bathroom grab bars?"
+                  className="h-11"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-widest text-muted-foreground ml-1">Message</Label>
-                <Textarea 
+                <Label className="field-tag text-muted-foreground">Message</Label>
+                <Textarea
                   value={newPost.content}
-                  onChange={(e) => setNewPost({...newPost, content: e.target.value})}
-                  placeholder="Describe your situation or question..." 
-                  className="min-h-[150px] resize-none bg-muted/50 border-transparent focus:border-border rounded-2xl shadow-none text-base p-4"
+                  onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
+                  placeholder="Describe your situation or question..."
+                  className="min-h-[150px] resize-none"
                 />
               </div>
             </div>
             <DialogFooter className="mt-8">
-              <Button 
-                variant="outline" 
-                onClick={() => setIsDialogOpen(false)}
-                className="h-12 rounded-2xl px-6 font-medium border-border"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleCreateDiscussion}
-                disabled={isSubmitting}
-                className="h-12 rounded-2xl px-8 font-medium bg-foreground text-background"
-              >
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+              <Button variant="brand" onClick={handleCreateDiscussion} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Post Discussion
+                Share with community
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
 
-      <div className="grid lg:grid-cols-4 gap-12 max-w-5xl mx-auto">
-        
-        {/* Left Sidebar */}
-        <div className="lg:col-span-1 space-y-8">
-           <div className="space-y-2">
-             <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 mb-4 ml-2">Categories</h3>
-             {categories.map(cat => (
-               <button
-                 key={cat}
-                 onClick={() => setActiveCategory(cat)}
-                 className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl font-medium transition-all ${activeCategory === cat ? 'bg-card border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] text-foreground' : 'bg-transparent text-muted-foreground hover:bg-muted/50 font-light'}`}
-               >
-                 <span>{cat}</span>
-                 {activeCategory === cat && <div className="w-2 h-2 rounded-full bg-foreground" />}
-               </button>
-             ))}
-           </div>
-        </div>
+        {/* ===== Featured discussion — curated, not algorithmic ===== */}
+        {featuredPost && activeCategory === 'All' && !searchQuery && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            onClick={() => setSelectedPost(featuredPost)}
+            className="mb-14 cursor-pointer group"
+          >
+            <span className="field-tag text-brand flex items-center gap-1.5 mb-4">
+              <Sparkles className="w-3 h-3" /> Featured discussion
+            </span>
+            <div className="border-b border-border pb-10">
+              <div className="flex items-center gap-3 mb-5">
+                <Avatar className="h-9 w-9 rounded-full border border-border">
+                  <AvatarImage src={featuredPost.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${featuredPost.authorId}`} />
+                  <AvatarFallback className="rounded-full">{featuredPost.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-medium leading-none">{featuredPost.authorName}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(new Date(featuredPost.timestamp))} ago · {featuredPost.category}</p>
+                </div>
+              </div>
+              <h2 className="narrative text-3xl md:text-4xl text-balance mb-3 group-hover:text-brand transition-colors">{featuredPost.title}</h2>
+              <p className="text-muted-foreground text-base leading-relaxed max-w-2xl line-clamp-2">{featuredPost.content}</p>
+              <div className="flex items-center gap-5 mt-5 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5"><Heart className="w-3.5 h-3.5" /> {featuredPost.likes}</span>
+                <span className="flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> {featuredPost.commentCount || 0} replies</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
-        {/* Main Feed */}
-        <div className="lg:col-span-3 space-y-8">
-           <div className="relative w-full mb-4">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/50" />
-            <Input 
-              placeholder="Search discussions, topics, or people..." 
-              className="pl-14 h-16 rounded-full bg-card border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] focus-visible:ring-border text-base" 
+        {/* ===== Search + category chips ===== */}
+        <div className="flex flex-col md:flex-row md:items-center gap-5 mb-10">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+            <Input
+              placeholder="Search discussions..."
+              className="pl-8 pr-0 h-11 border-0 border-b border-border rounded-none focus-visible:ring-0 focus-visible:border-brand bg-transparent"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {categories.map(cat => {
+              const isActive = activeCategory === cat;
+              return (
+                <motion.button
+                  key={cat}
+                  layout
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    isActive ? 'bg-foreground text-background border-foreground' : 'bg-background text-muted-foreground border-border hover:border-foreground/30'
+                  }`}
+                >
+                  {cat}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
 
-          <AnimatePresence mode="wait">
-              <motion.div 
-                key="feed"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
-              >
-                {filteredPosts.length === 0 ? (
-                  <div className="text-center py-24 bg-card rounded-[2.5rem] border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)]">
-                    <MessageSquare className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-medium mb-2 tracking-tight">No discussions found</h3>
-                    <p className="text-muted-foreground font-light">Be the first to start a conversation in this topic.</p>
+        {/* ===== Feed — journal entries separated by whitespace, not boxed cards ===== */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeCategory + searchQuery}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            {filteredPosts.length === 0 ? (
+              <div className="text-center py-24 border-t border-border">
+                <MessageSquare className="w-6 h-6 text-muted-foreground/40 mx-auto mb-4" strokeWidth={1.5} />
+                <h3 className="narrative text-2xl mb-2">Nothing here yet.</h3>
+                <p className="text-muted-foreground max-w-xs mx-auto">Be the first to start this conversation — someone else is likely wondering the same thing.</p>
+              </div>
+            ) : (
+              <div className="border-t border-border">
+                {filteredPosts.map((post, i) => (
+                  <motion.article
+                    key={post.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                    onClick={() => setSelectedPost(post)}
+                    className="py-9 border-b border-border cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3 mb-4">
+                      <Avatar className="h-9 w-9 rounded-full border border-border">
+                        <AvatarImage src={post.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.authorId}`} />
+                        <AvatarFallback className="rounded-full">{post.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium leading-none">{post.authorName}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(new Date(post.timestamp))} ago</p>
+                      </div>
+                      <span className="field-tag text-muted-foreground ml-auto shrink-0">{post.category}</span>
+                    </div>
+
+                    <h3 className="text-2xl font-semibold tracking-tight mb-2 group-hover:text-brand transition-colors max-w-2xl">{post.title}</h3>
+                    <p className="text-muted-foreground leading-relaxed max-w-2xl line-clamp-2 mb-5">{post.content}</p>
+
+                    <div className="flex items-center gap-6">
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => handleLike(e, post.id)}
+                        className={`flex items-center gap-1.5 text-sm transition-colors ${post.likedBy?.includes(user?.uid || '') ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        <motion.span animate={likedPulse === post.id ? { scale: [1, 1.35, 1] } : {}} transition={{ duration: 0.35 }}>
+                          <Heart className={`w-4 h-4 ${post.likedBy?.includes(user?.uid || '') ? 'fill-current' : ''}`} />
+                        </motion.span>
+                        {post.likes}
+                      </motion.button>
+                      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <MessageSquare className="w-4 h-4" /> {post.commentCount || 0}
+                      </span>
+                    </div>
+                  </motion.article>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* ===== Post detail + comments ===== */}
+      <Dialog open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
+        <DialogContent className="sm:max-w-[680px] rounded-md p-0 border border-border overflow-hidden flex flex-col max-h-[85vh]">
+          {selectedPost && (
+            <>
+              <div className="p-8 pb-6 border-b border-border overflow-y-auto">
+                <div className="flex items-center gap-3 mb-6">
+                  <Avatar className="h-10 w-10 rounded-full border border-border">
+                    <AvatarImage src={selectedPost.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedPost.authorId}`} />
+                    <AvatarFallback className="rounded-full">{selectedPost.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-none">{selectedPost.authorName}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{formatDistanceToNow(new Date(selectedPost.timestamp))} ago</p>
                   </div>
-                ) : (
-                  filteredPosts.map((post, i) => (
-                    <motion.div 
-                      key={post.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      onClick={() => setSelectedPost(post)}
-                      className="bg-card rounded-[2.5rem] p-10 border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] hover:shadow-xl transition-shadow cursor-pointer"
-                    >
-                       <div className="flex justify-between items-start mb-6">
-                          <div className="flex items-center gap-5">
-                            <Avatar className="h-14 w-14 shadow-sm border border-black/5 dark:border-white/5">
-                              <AvatarImage src={post.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.authorId}`} />
-                              <AvatarFallback>{post.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                               <h4 className="font-medium text-foreground text-base tracking-tight leading-none">{post.authorName}</h4>
-                               <span className="text-sm text-muted-foreground font-light mt-1.5 block">{formatDistanceToNow(new Date(post.timestamp))} ago</span>
-                            </div>
-                          </div>
-                          <div className="px-4 py-1.5 rounded-full bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-widest border border-border/50">
-                            {post.category}
-                          </div>
-                       </div>
-                       
-                       <h3 className="text-2xl font-medium tracking-tight mb-3">{post.title}</h3>
-                       <p className="text-muted-foreground text-base font-light leading-relaxed mb-8 line-clamp-3">
-                         {post.content}
-                       </p>
+                  <span className="field-tag text-muted-foreground ml-auto shrink-0">{selectedPost.category}</span>
+                </div>
+                <h3 className="narrative text-3xl mb-4 text-balance">{selectedPost.title}</h3>
+                <p className="text-foreground/85 leading-relaxed whitespace-pre-wrap">
+                  {selectedPost.content}
+                </p>
+                <div className="flex items-center gap-6 pt-6 mt-6 border-t border-border">
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={(e) => handleLike(e, selectedPost.id)}
+                    className={`flex items-center gap-2 text-sm transition-colors ${(posts.find(p => p.id === selectedPost.id)?.likedBy ?? selectedPost.likedBy)?.includes(user?.uid || '') ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    <Heart className={`w-4 h-4 ${(posts.find(p => p.id === selectedPost.id)?.likedBy ?? selectedPost.likedBy)?.includes(user?.uid || '') ? 'fill-current' : ''}`} /> {posts.find(p => p.id === selectedPost.id)?.likes ?? selectedPost.likes}
+                  </motion.button>
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MessageSquare className="w-4 h-4" /> {posts.find(p => p.id === selectedPost.id)?.commentCount ?? selectedPost.commentCount ?? 0}
+                  </span>
+                </div>
+              </div>
 
-                       <div className="flex items-center gap-8 pt-6 border-t border-black/5 dark:border-white/5">
-                          <button 
-                            onClick={(e) => handleLike(e, post.id)} 
-                            className={`flex items-center gap-3 font-medium text-sm transition-colors ${post.likedBy?.includes(user?.uid || '') ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
-                          >
-                             <Heart className={`w-5 h-5 ${post.likedBy?.includes(user?.uid || '') ? 'fill-current' : ''}`} /> {post.likes}
-                          </button>
-                          <div className="flex items-center gap-3 text-muted-foreground font-medium text-sm hover:text-foreground transition-colors">
-                             <MessageSquare className="w-5 h-5" /> {post.commentCount || 0}
-                          </div>
-                       </div>
+              {/* Comments — conversational, minimal avatars, no boxed replies */}
+              <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-card min-h-[200px]">
+                <span className="field-tag text-muted-foreground block">{currentComments.length} {currentComments.length === 1 ? 'response' : 'responses'}</span>
+                {currentComments.length === 0 ? (
+                  <p className="text-muted-foreground text-sm py-6">No responses yet. Be the first to reply.</p>
+                ) : (
+                  currentComments.map((comment, i) => (
+                    <motion.div
+                      key={comment.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i, 6) * 0.04, duration: 0.4 }}
+                      className="flex gap-3.5"
+                    >
+                      <Avatar className="h-8 w-8 rounded-full border border-border shrink-0 mt-0.5">
+                        <AvatarImage src={comment.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.authorId}`} />
+                        <AvatarFallback className="rounded-full text-xs">{comment.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <h5 className="font-medium text-sm">{comment.authorName}</h5>
+                          <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(comment.timestamp))} ago</span>
+                        </div>
+                        <p className="text-sm text-foreground/85 leading-relaxed mt-1 whitespace-pre-wrap">{comment.content}</p>
+                        <button
+                          onClick={() => handleLikeComment(comment.id)}
+                          className={`flex items-center gap-1.5 text-xs mt-2 transition-colors ${comment.likedBy?.includes(user?.uid || '') ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          <Heart className={`w-3 h-3 ${comment.likedBy?.includes(user?.uid || '') ? 'fill-current' : ''}`} /> {comment.likes || 0}
+                        </button>
+                      </div>
                     </motion.div>
                   ))
                 )}
-              </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
-
-      <Dialog open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
-        <DialogContent className="sm:max-w-[700px] rounded-[2rem] p-0 border border-black/5 dark:border-white/5 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-          {selectedPost && (
-            <>
-              <div className="p-8 pb-6 border-b border-black/5 dark:border-white/5 bg-muted/10 overflow-y-auto">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center gap-5">
-                    <Avatar className="h-12 w-12 shadow-sm border border-black/5 dark:border-white/5">
-                      <AvatarImage src={selectedPost.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedPost.authorId}`} />
-                      <AvatarFallback>{selectedPost.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <h4 className="font-medium text-foreground text-base tracking-tight leading-none">{selectedPost.authorName}</h4>
-                        <span className="text-sm text-muted-foreground font-light mt-1.5 block">{formatDistanceToNow(new Date(selectedPost.timestamp))} ago</span>
-                    </div>
-                  </div>
-                  <div className="px-4 py-1.5 rounded-full bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-widest border border-border/50">
-                    {selectedPost.category}
-                  </div>
-                </div>
-                <h3 className="text-2xl font-medium tracking-tight mb-4">{selectedPost.title}</h3>
-                <p className="text-foreground text-base font-light leading-relaxed whitespace-pre-wrap">
-                  {selectedPost.content}
-                </p>
-                <div className="flex items-center gap-8 pt-6 mt-6 border-t border-black/5 dark:border-white/5">
-                  <button 
-                    onClick={(e) => handleLike(e, selectedPost.id)} 
-                    className={`flex items-center gap-3 font-medium text-sm transition-colors ${(posts.find(p => p.id === selectedPost.id)?.likedBy ?? selectedPost.likedBy)?.includes(user?.uid || '') ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                      <Heart className={`w-5 h-5 ${(posts.find(p => p.id === selectedPost.id)?.likedBy ?? selectedPost.likedBy)?.includes(user?.uid || '') ? 'fill-current' : ''}`} /> {posts.find(p => p.id === selectedPost.id)?.likes ?? selectedPost.likes}
-                  </button>
-                  <div className="flex items-center gap-3 text-muted-foreground font-medium text-sm">
-                      <MessageSquare className="w-5 h-5" /> {posts.find(p => p.id === selectedPost.id)?.commentCount ?? selectedPost.commentCount ?? 0}
-                  </div>
-                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-card min-h-[200px]">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 mb-4">Responses ({currentComments.length})</h4>
-                {currentComments.length === 0 ? (
-                  <p className="text-muted-foreground font-light text-sm text-center py-8">No responses yet. Be the first to reply!</p>
-                ) : (
-                  currentComments.map((comment) => (
-                    <div key={comment.id} className="flex gap-4">
-                      <Avatar className="h-10 w-10 shadow-sm border border-black/5 dark:border-white/5 shrink-0">
-                        <AvatarImage src={comment.authorAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.authorId}`} />
-                        <AvatarFallback>{comment.authorName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div className="bg-muted/30 rounded-2xl p-4 flex-1">
-                        <div className="flex items-baseline justify-between mb-2">
-                          <h5 className="font-medium text-sm">{comment.authorName}</h5>
-                          <span className="text-xs text-muted-foreground font-light">{formatDistanceToNow(new Date(comment.timestamp))}</span>
-                        </div>
-                        <p className="text-sm font-light text-foreground whitespace-pre-wrap mb-3">{comment.content}</p>
-                        <div className="flex items-center gap-4 pt-3 border-t border-black/5 dark:border-white/5">
-                          <button 
-                            onClick={() => handleLikeComment(comment.id)} 
-                            className={`flex items-center gap-2 font-medium text-xs transition-colors ${comment.likedBy?.includes(user?.uid || '') ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
-                          >
-                             <Heart className={`w-4 h-4 ${comment.likedBy?.includes(user?.uid || '') ? 'fill-current' : ''}`} /> {comment.likes || 0}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="p-4 bg-card border-t border-black/5 dark:border-white/5">
+              <div className="p-4 bg-card border-t border-border">
                 <div className="relative flex items-center">
-                  <Input 
+                  <Input
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     onKeyDown={(e) => {
@@ -403,13 +459,14 @@ export function CommunityPage() {
                       }
                     }}
                     placeholder="Write a response..."
-                    className="pl-4 pr-12 h-14 bg-muted/50 border-transparent focus:border-border rounded-2xl shadow-none text-base w-full"
+                    className="pr-12 h-11 w-full"
                   />
-                  <Button 
+                  <Button
                     size="icon"
                     onClick={handleAddComment}
                     disabled={!newComment.trim() || isSubmittingComment}
-                    className="absolute right-2 h-10 w-10 rounded-xl bg-foreground text-background hover:bg-foreground/90 transition-all"
+                    variant="brand"
+                    className="absolute right-1.5 h-8 w-8"
                   >
                     {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>

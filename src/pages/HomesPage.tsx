@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { Plus, Home, MapPin, Search, ChevronRight } from "lucide-react";
+import { Plus, Home, MapPin, Search, ArrowUpRight } from "lucide-react";
 import { useHomeStore } from "@/stores/useHomeStore";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 
 export function HomesPage() {
@@ -12,116 +12,96 @@ export function HomesPage() {
   const navigate = useNavigate();
 
   const visibleHomes = homes.filter(h => !hiddenHomes.includes(h.id));
-  
-  const filteredHomes = visibleHomes.filter(h => 
-    h.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredHomes = visibleHomes.filter(h =>
+    h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     h.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     h.nickname?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 pb-12 pt-4">
+    <div className="space-y-14">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-4xl md:text-5xl font-medium tracking-tight mb-3">Properties</h1>
-          <p className="text-muted-foreground text-lg font-light">Manage and monitor the spaces you care about.</p>
+          <span className="field-tag text-muted-foreground block mb-2">Your homes</span>
+          <h1 className="narrative text-5xl md:text-6xl mb-2">Where you live.</h1>
         </div>
-        <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input 
-              placeholder="Search properties..." 
-              className="pl-12 h-14 rounded-[1.5rem] bg-card border-border focus-visible:ring-1 focus-visible:ring-foreground shadow-sm text-base transition-all" 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+            <Input placeholder="Search" className="pl-10 h-10" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           </div>
-          <Button 
-            onClick={() => navigate('/properties/new')}
-            className="rounded-[1.5rem] bg-foreground text-background hover:bg-foreground/90 h-14 px-8 shrink-0 shadow-md transition-all active:scale-95 w-full sm:w-auto"
-          >
-            <Plus className="w-5 h-5 mr-2" /> Add Property
+          <Button variant="brand" onClick={() => navigate('/properties/new')} className="w-full sm:w-auto shrink-0">
+            <Plus className="w-4 h-4 mr-2" /> Add Property
           </Button>
         </div>
       </div>
 
       {visibleHomes.length === 0 ? (
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="bg-card rounded-[2.5rem] p-16 text-center border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)]"
-        >
-          <div className="w-24 h-24 bg-muted rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-            <Home className="w-10 h-10 text-muted-foreground" />
+        <div className="border-b border-border py-24 text-center">
+          <div className="w-14 h-14 border border-border flex items-center justify-center mx-auto mb-6">
+            <Home className="w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
           </div>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">No properties yet</h2>
-          <p className="text-muted-foreground mb-10 max-w-sm mx-auto font-light leading-relaxed">
-            Get started by adding a property to monitor its environmental safety and care setup.
-          </p>
-          <Button 
-            onClick={() => navigate('/properties/new')}
-            className="rounded-[1.5rem] bg-foreground text-background px-8 h-14 text-base"
-          >
-            Add your first property
-          </Button>
-        </motion.div>
+          <h2 className="text-2xl font-semibold tracking-tight mb-2">No properties yet</h2>
+          <p className="text-muted-foreground mb-8 max-w-sm mx-auto">Add a property to begin understanding its safety, room by room.</p>
+          <Button variant="brand" onClick={() => navigate('/properties/new')}>Add your first property</Button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredHomes.map((home, index) => (
-            <motion.div
-              key={home.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              onClick={() => navigate(`/properties/${home.id}`)}
-              className="group cursor-pointer bg-card rounded-[2.5rem] overflow-hidden border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] hover:shadow-xl transition-all duration-500 hover:-translate-y-2 flex flex-col"
-            >
-              <div className="aspect-[4/3] w-full bg-muted relative overflow-hidden">
-                 {home.coverImage ? (
-                   <img src={home.coverImage} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={home.name} />
-                 ) : (
-                   <div className="w-full h-full flex items-center justify-center">
-                      <Home className="w-12 h-12 text-muted-foreground/30" />
-                   </div>
-                 )}
-                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              </div>
-              <div className="p-8 flex-1 flex flex-col justify-between">
-                 <div>
-                    <h3 className="text-2xl font-medium tracking-tight transition-colors">
-                      {home.name}
-                    </h3>
-                    <p className="text-muted-foreground text-sm mt-3 flex items-center gap-2 font-light">
-                      <MapPin className="w-4 h-4" /> {home.address || "No address provided"}
-                    </p>
-                 </div>
-                 
-                 <div className="mt-8 flex items-center justify-between border-t border-border pt-6">
-                    <div className="text-sm font-medium text-muted-foreground">
-                      {home.rooms?.length || 0} Rooms
-                    </div>
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center group-hover:bg-foreground group-hover:text-background transition-all duration-300">
-                      <ChevronRight className="w-5 h-5" />
-                    </div>
-                 </div>
-              </div>
-            </motion.div>
-          ))}
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: filteredHomes.length * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        <div>
+          {filteredHomes.map((home, index) => {
+            const reversed = index % 2 === 1;
+            return (
+              <motion.div
+                key={home.id}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+                onClick={() => navigate(`/properties/${home.id}`)}
+                className="group cursor-pointer border-b border-border py-10 md:py-16 flex flex-col md:flex-row items-start gap-8 md:gap-16"
+              >
+                <div className={`w-full md:w-[56%] shrink-0 ${reversed ? "md:order-2" : ""}`}>
+                  <div className="aspect-[16/10] w-full bg-muted relative overflow-hidden photo-vignette">
+                    {home.coverImage ? (
+                      <img src={home.coverImage} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={home.name} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Home className="w-10 h-10 text-muted-foreground/30" strokeWidth={1.5} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={`flex-1 flex flex-col justify-center h-full min-h-[160px] ${reversed ? "md:order-1" : ""}`}>
+                  <span className="tabular text-brand text-xs mb-4 block">{String(index + 1).padStart(2, "0")} / {String(filteredHomes.length).padStart(2, "0")}</span>
+                  <h3 className="narrative text-4xl md:text-5xl group-hover:text-brand transition-colors mb-4">
+                    {home.name}
+                  </h3>
+                  <p className="text-muted-foreground text-base flex items-center gap-2 mb-6">
+                    <MapPin className="w-4 h-4 shrink-0" /> {home.address || "No address provided"}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground/80 group-hover:text-brand transition-colors">
+                    {home.rooms?.length || 0} rooms monitored <ArrowUpRight className="w-4 h-4" />
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+
+          <button
             onClick={() => navigate('/properties/new')}
-            className="group cursor-pointer bg-card/50 rounded-[2.5rem] overflow-hidden border-2 border-dashed border-border hover:border-foreground/30 transition-all duration-300 flex flex-col items-center justify-center p-8 aspect-[4/3] md:aspect-auto shadow-sm"
+            className="group w-full flex items-center justify-between py-8 text-left"
           >
-             <div className="w-16 h-16 rounded-[1.5rem] bg-muted flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-foreground group-hover:text-background transition-all duration-500">
-               <Plus className="w-6 h-6 text-muted-foreground group-hover:text-background transition-colors" />
-             </div>
-             <h3 className="text-xl font-medium tracking-tight">Add Property</h3>
-             <p className="text-muted-foreground text-sm mt-2 font-light">Setup another location</p>
-          </motion.div>
+            <div className="flex items-center gap-5">
+              <div className="w-11 h-11 border border-border flex items-center justify-center group-hover:bg-foreground group-hover:text-background transition-colors duration-300 shrink-0">
+                <Plus className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-medium tracking-tight text-foreground">Add another property</h3>
+                <p className="text-muted-foreground text-sm">Set up a new location to monitor</p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
+          </button>
         </div>
       )}
     </div>

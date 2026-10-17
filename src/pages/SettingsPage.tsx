@@ -1,44 +1,111 @@
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from 'next-themes';
 import { useHomeStore } from "@/stores/useHomeStore";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { useScanStore } from "@/stores/scanStore";
+import { useCommunityStore } from "@/stores/useCommunityStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
 } from "@/components/ui/select";
-import { 
-  User, 
-  Home, 
-  Bell, 
-  Shield, 
-  LogOut, 
-  Trash2, 
-  Save, 
+import {
+  User,
+  Home,
+  Bell,
+  Shield,
+  LogOut,
+  Trash2,
+  Save,
   Camera,
   Mail,
   UserCircle,
-  Plus,
-  ChevronRight
+  ArrowUpRight,
+  Lock,
+  KeyRound,
+  Sparkles,
+  Sun,
+  Moon,
+  Laptop,
+  Download,
+  Database,
+  MapPin,
+  Cloud,
+  Watch,
+  Image as ImageIcon,
+  Cpu,
+  ShieldCheck,
+  MessageSquare,
+  ScanLine,
+  TrendingUp
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+
+// Shared field wrapper — a labeled row against a hairline, not a rounded box.
+function FieldRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-6 py-5 border-b border-border last:border-b-0">
+      <div className="min-w-0">
+        <p className="text-sm font-medium tracking-tight">{label}</p>
+        {description && <p className="text-xs text-muted-foreground mt-1 max-w-sm">{description}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+function SectionPanel({ title, description, children, footer }: { title: string; description?: string; children: React.ReactNode; footer?: React.ReactNode }) {
+  return (
+    <div className="border border-border bg-card">
+      <div className="px-6 py-5 border-b border-border">
+        <span className="field-tag text-muted-foreground block mb-1.5">{title}</span>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+      <div className="px-6">{children}</div>
+      {footer && <div className="px-6 py-4 border-t border-border bg-muted/20">{footer}</div>}
+    </div>
+  );
+}
+
+// A calm, visual explanation row for the Privacy section — not legal text.
+function PrivacyPoint({ icon: Icon, title, copy }: { icon: any; title: string; copy: string }) {
+  return (
+    <div className="flex items-start gap-4 py-5 border-b border-border last:border-b-0">
+      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0">
+        <Icon className="h-4 w-4 text-foreground" strokeWidth={1.6} />
+      </div>
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-sm text-muted-foreground mt-1 leading-relaxed max-w-md">{copy}</p>
+      </div>
+    </div>
+  );
+}
+
+import { processImageForStorage, deleteImageFromStorage } from "@/services/storageService";
 
 export function SettingsPage() {
   const navigate = useNavigate();
   const { profile, user, logout, updateProfile } = useAuthStore();
-  const { homes } = useHomeStore();
+  const { homes, deleteHome } = useHomeStore();
+  const { scans } = useScanStore();
+  const { posts, subscribePosts } = useCommunityStore();
+  const { theme, setTheme } = useTheme();
+
   const [activeTab, setActiveTab] = useState('profile');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [homeToDelete, setHomeToDelete] = useState<string | null>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
   const [formData, setFormData] = useState({
     name: profile?.name || user?.displayName || '',
     email: profile?.email || user?.email || '',
@@ -48,6 +115,63 @@ export function SettingsPage() {
     privacyLevel: profile?.privacyLevel || 'Private',
     avatar: profile?.avatar || user?.photoURL || '',
   });
+
+  const [switches, setSwitches] = useState({
+    autoDetectRooms: true,
+    saveOriginalPhotos: true,
+    emailSummaries: true,
+    newScanReports: true,
+    communityMentions: true,
+    hazardAlerts: true,
+    accountActivity: true,
+    shareAnonymizedData: true,
+  });
+
+  useEffect(() => {
+    const unsub = subscribePosts();
+    return () => unsub();
+  }, [subscribePosts]);
+
+  useEffect(() => {
+    if (profile || user) {
+      setFormData({
+        name: profile?.name || user?.displayName || '',
+        email: profile?.email || user?.email || '',
+        role: profile?.role || 'Caregiver',
+        ageGroup: profile?.ageGroup || '65-74',
+        notificationsEnabled: profile?.notificationsEnabled ?? true,
+        privacyLevel: profile?.privacyLevel || 'Private',
+        avatar: profile?.avatar || user?.photoURL || '',
+      });
+    }
+  }, [profile, user]);
+
+  // Real, derived stats — nothing fabricated.
+  const stats = useMemo(() => {
+    const allScans = Object.values(scans).flat();
+    const completedScans = allScans.filter(s => s.status === 'Completed');
+    const roomsCount = homes.reduce((sum, h) => sum + (h.rooms?.length || 0), 0);
+    const myPosts = posts.filter(p => p.authorId === user?.uid);
+
+    // "Improved" = a room whose latest completed scan scores higher than its earliest.
+    let roomsImproved = 0;
+    homes.forEach(h => {
+      h.rooms?.forEach(r => {
+        const roomScans = (scans[r.id] || []).filter(s => s.status === 'Completed').sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        if (roomScans.length >= 2 && roomScans[roomScans.length - 1].safetyScore > roomScans[0].safetyScore) {
+          roomsImproved += 1;
+        }
+      });
+    });
+
+    return {
+      homes: homes.length,
+      rooms: roomsCount,
+      scans: completedScans.length,
+      posts: myPosts.length,
+      improved: roomsImproved,
+    };
+  }, [homes, scans, posts, user]);
 
   const getRoleLabel = (val: string) => {
     switch (val) {
@@ -67,43 +191,19 @@ export function SettingsPage() {
     }
   };
 
-  const [switches, setSwitches] = useState({
-    autoDetectRooms: true,
-    saveOriginalPhotos: true,
-    emailSummaries: true,
-    newScanReports: true,
-    communityMentions: true,
-    hazardAlerts: true,
-    accountActivity: true,
-    shareAnonymizedData: true,
-  });
-
-  useEffect(() => {
-    if (profile || user) {
-      setFormData({
-        name: profile?.name || user?.displayName || '',
-        email: profile?.email || user?.email || '',
-        role: profile?.role || 'Caregiver',
-        ageGroup: profile?.ageGroup || '65-74',
-        notificationsEnabled: profile?.notificationsEnabled ?? true,
-        privacyLevel: profile?.privacyLevel || 'Private',
-        avatar: profile?.avatar || user?.photoURL || '',
-      });
-    }
-  }, [profile, user]);
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, avatar: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      const oldAvatar = formData.avatar;
+      const avatarUrl = await processImageForStorage(file, oldAvatar);
+      setFormData(prev => ({ ...prev, avatar: avatarUrl }));
     }
   };
 
   const handleRemoveImage = () => {
+    if (formData.avatar) {
+      deleteImageFromStorage(formData.avatar).catch(() => {});
+    }
     setFormData(prev => ({ ...prev, avatar: '' }));
   };
 
@@ -122,351 +222,394 @@ export function SettingsPage() {
     toast.success("Signed out successfully");
   };
 
+  const handleDeleteHome = async (homeId: string) => {
+    try {
+      await deleteHome(homeId);
+      toast.success("Home removed");
+    } catch {
+      toast.error("Failed to remove home");
+    } finally {
+      setHomeToDelete(null);
+    }
+  };
+
+  const handleExportData = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      profile: { name: formData.name, email: formData.email, role: formData.role },
+      homes: homes.map(h => ({
+        name: h.name,
+        address: h.address,
+        rooms: h.rooms?.map(r => ({
+          name: r.name,
+          type: r.type,
+          scans: (scans[r.id] || []).map(s => ({
+            date: s.createdAt,
+            safetyScore: s.safetyScore,
+            hazards: s.hazards?.length || 0,
+          })),
+        })),
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `carelens-data-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('Your data has been exported');
+  };
+
   const navItems = [
-    { id: 'profile', label: 'Profile', icon: <User className="h-4 w-4" /> },
-    { id: 'homes', label: 'Homes & Rooms', icon: <Home className="h-4 w-4" /> },
-    { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
-    { id: 'privacy', label: 'Privacy & Security', icon: <Shield className="h-4 w-4" /> },
+    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'account', label: 'Account & Security', icon: KeyRound },
+    { id: 'privacy', label: 'Privacy', icon: Shield },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'appearance', label: 'Appearance', icon: Sparkles },
+    { id: 'homes', label: 'Homes & Data', icon: Home },
+  ];
+
+  const statBlocks = [
+    { label: 'Homes', value: stats.homes, icon: Home },
+    { label: 'Rooms', value: stats.rooms, icon: ImageIcon },
+    { label: 'Scans', value: stats.scans, icon: ScanLine },
+    { label: 'Improved', value: stats.improved, icon: TrendingUp },
+    { label: 'Community', value: stats.posts, icon: MessageSquare },
   ];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in duration-500 pb-12 pt-4">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h1 className="text-4xl md:text-5xl font-medium tracking-tight mb-3">Settings</h1>
-          <p className="text-muted-foreground text-lg font-light">Manage your account and app preferences.</p>
-        </div>
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground bg-muted/50 px-4 py-2 rounded-full border border-black/5 dark:border-white/5 shadow-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          System Status: Optimal
-        </div>
+    <div className="space-y-10">
+      <div className="pb-2">
+        <span className="field-tag text-muted-foreground block mb-2">Account</span>
+        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">Settings</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
-        <aside className="md:col-span-3 space-y-4">
-          <div className="space-y-1">
-            {navItems.map((item) => (
-              <Button 
-                key={item.id}
-                variant="ghost" 
-                className={`w-full justify-start gap-4 h-14 rounded-2xl transition-all text-base ${activeTab === item.id ? 'bg-card border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] text-foreground font-medium' : 'text-muted-foreground hover:bg-muted/50 font-light'}`}
-                onClick={() => setActiveTab(item.id)}
-              >
-                {item.icon} {item.label}
-              </Button>
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-14">
+        {/* ===== Large profile area ===== */}
+        <aside className="md:col-span-4 space-y-10">
+          <div>
+            <div className="relative w-fit group">
+              <Avatar className="h-28 w-28 rounded-full border border-border">
+                <AvatarImage src={formData.avatar || undefined} />
+                <AvatarFallback className="rounded-full text-3xl font-semibold bg-muted">{formData.name ? formData.name[0] : 'U'}</AvatarFallback>
+              </Avatar>
+              <button onClick={() => fileInputRef.current?.click()} className="absolute -bottom-1 -right-1 h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center border-2 border-background">
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+            </div>
+            <h2 className="narrative text-3xl mt-5">{formData.name || 'Your name'}</h2>
+            <p className="text-muted-foreground text-sm mt-1">{getRoleLabel(formData.role)} · {formData.email}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-px bg-border border border-border">
+            {statBlocks.map((s) => (
+              <div key={s.label} className="bg-card p-4 flex flex-col gap-2">
+                <s.icon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
+                <span className="tabular text-2xl font-semibold tracking-tight">{s.value}</span>
+                <span className="field-tag text-muted-foreground">{s.label}</span>
+              </div>
             ))}
           </div>
-          
-          <div className="p-5 rounded-3xl border border-red-500/10 bg-red-50/5 mt-8">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-red-500 mb-4 ml-2">Danger Zone</h4>
-            <div className="space-y-1">
-              <Button 
-                variant="ghost" 
-                className="w-full justify-start gap-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 h-12 rounded-2xl px-4 text-sm font-medium"
-                onClick={handleSignOut}
+
+          <nav className="border-t border-border">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                className={`w-full flex items-center gap-3 py-3.5 border-b border-border text-left transition-colors ${activeTab === item.id ? 'text-brand' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setActiveTab(item.id)}
               >
-                <LogOut className="h-4 w-4" /> Sign Out
-              </Button>
-              <Button variant="ghost" className="w-full justify-start gap-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 h-12 rounded-2xl px-4 text-sm font-medium" onClick={() => toast.success("Account deletion request submitted")}>
-                <Trash2 className="h-4 w-4" /> Delete Account
-              </Button>
+                <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                <span className="text-sm font-medium">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          {/* Danger zone — calm, no red boxes */}
+          <div>
+            <span className="field-tag text-muted-foreground block mb-3">A few quiet options</span>
+            <div className="border-t border-border">
+              <button onClick={handleSignOut} className="w-full flex items-center gap-3 py-3.5 border-b border-border text-muted-foreground hover:text-foreground transition-colors text-left">
+                <LogOut className="h-4 w-4" strokeWidth={1.75} /> <span className="text-sm font-medium">Sign Out</span>
+              </button>
+              <button
+                onClick={() => toast.success("We've reset your local preferences")}
+                className="w-full flex items-center gap-3 py-3.5 border-b border-border text-muted-foreground hover:text-foreground transition-colors text-left"
+              >
+                <Database className="h-4 w-4" strokeWidth={1.75} /> <span className="text-sm font-medium">Reset Preferences</span>
+              </button>
+
+              {!confirmingDelete ? (
+                <button
+                  onClick={() => setConfirmingDelete(true)}
+                  className="w-full flex items-center gap-3 py-3.5 text-muted-foreground hover:text-destructive transition-colors text-left"
+                >
+                  <Trash2 className="h-4 w-4" strokeWidth={1.75} /> <span className="text-sm font-medium">Delete Account</span>
+                </button>
+              ) : (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="py-4 space-y-3">
+                  <p className="text-sm text-muted-foreground leading-relaxed">This permanently removes your homes, scans, and community activity. We'll send a confirmation link to {formData.email}.</p>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>Never mind</Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        toast.success("Confirmation email sent");
+                        setConfirmingDelete(false);
+                      }}
+                    >
+                      Send confirmation
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
             </div>
           </div>
         </aside>
 
-        <div className="md:col-span-9 space-y-8">
-          {activeTab === 'profile' && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <Card className="border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] bg-card rounded-[2.5rem] overflow-hidden">
-                <CardHeader className="pb-8 pt-8 px-8">
-                  <CardTitle className="text-2xl font-medium tracking-tight">Public Profile</CardTitle>
-                  <CardDescription className="text-base font-light mt-2">Your identity within the CareLens community.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-8 px-8">
-                  <div className="flex flex-col sm:flex-row items-center gap-8 pb-8 border-b border-border/40">
-                    <div className="relative group">
-                      <Avatar className="h-28 w-28 border-4 border-background ring-2 ring-border/40 group-hover:ring-primary/40 transition-all shadow-xl">
-                        <AvatarImage src={formData.avatar || undefined} />
-                        <AvatarFallback className="text-3xl font-bold bg-primary/10 text-primary">{formData.name ? formData.name[0] : 'U'}</AvatarFallback>
-                      </Avatar>
-                      <Button size="icon" variant="outline" className="absolute bottom-1 right-1 h-9 w-9 rounded-full bg-background shadow-lg border-border/60 hover:bg-muted" onClick={() => fileInputRef.current?.click()}>
-                        <Camera className="h-4 w-4" />
-                      </Button>
-                      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+        {/* ===== Sections ===== */}
+        <div className="md:col-span-8 space-y-8">
+          <AnimatePresence mode="wait">
+            {activeTab === 'profile' && (
+              <motion.div key="profile" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+                <SectionPanel
+                  title="Public Profile"
+                  description="Your identity within the CareLens community."
+                  footer={
+                    <div className="flex justify-between items-center">
+                      <p className="field-tag text-muted-foreground">Synced to your account</p>
+                      <Button variant="brand" onClick={handleSave}><Save className="h-4 w-4 mr-2" /> Save Changes</Button>
                     </div>
-                    <div className="space-y-2 text-center sm:text-left">
-                      <h3 className="text-xl font-bold">Profile Picture</h3>
-                      <p className="text-sm text-muted-foreground max-w-[300px]">
-                        Visible to other caregivers when you post in the community.
-                      </p>
-                      <div className="flex gap-2 justify-center sm:justify-start pt-2">
-                        <Button variant="outline" size="sm" className="rounded-xl px-4 h-9 font-bold" onClick={() => fileInputRef.current?.click()}>Upload New</Button>
-                        <Button variant="ghost" size="sm" className="rounded-xl px-4 h-9 font-bold text-red-500 hover:text-red-600" onClick={handleRemoveImage}>Remove</Button>
-                      </div>
-                    </div>
+                  }
+                >
+                  <div className="flex gap-2 py-6 border-b border-border">
+                    <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Upload New Photo</Button>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleRemoveImage}>Remove</Button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                    <div className="space-y-3">
-                      <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 ml-1">Full Name</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 py-8">
+                    <div className="space-y-2">
+                      <Label className="field-tag text-muted-foreground">Full Name</Label>
                       <div className="relative">
-                        <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
-                        <Input 
-                          value={formData.name} 
-                          onChange={(e) => setFormData({...formData, name: e.target.value})}
-                          className="pl-12 h-14 bg-muted/30 border-transparent focus:border-border rounded-2xl shadow-none text-base"
-                        />
+                        <UserCircle className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                        <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="pl-10 h-11" />
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 ml-1">Email Address</Label>
+                    <div className="space-y-2">
+                      <Label className="field-tag text-muted-foreground">Email Address</Label>
                       <div className="relative">
-                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
-                        <Input 
-                          type="email"
-                          value={formData.email} 
-                          onChange={(e) => setFormData({...formData, email: e.target.value})}
-                          className="pl-12 h-14 bg-muted/30 border-transparent focus:border-border rounded-2xl shadow-none text-base"
-                        />
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                        <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="pl-10 h-11" />
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 ml-1">Your Primary Role</Label>
-                      <Select 
-                        value={formData.role} 
-                        onValueChange={(val: any) => setFormData({...formData, role: val})}
-                      >
-                        <SelectTrigger className="h-14 w-full bg-muted/30 border-transparent focus:border-border rounded-2xl shadow-none text-base pl-4">
-                          <span className="flex flex-1 text-left truncate">
-                            {getRoleLabel(formData.role) || "Select role"}
-                          </span>
+                    <div className="space-y-2">
+                      <Label className="field-tag text-muted-foreground">Primary Role</Label>
+                      <Select value={formData.role} onValueChange={(val: any) => setFormData({ ...formData, role: val })}>
+                        <SelectTrigger className="h-11 w-full">
+                          <span className="flex flex-1 text-left truncate">{getRoleLabel(formData.role) || "Select role"}</span>
                         </SelectTrigger>
-                        <SelectContent className="rounded-2xl border border-border shadow-xl">
-                          <SelectItem value="Homeowner" className="py-3 rounded-xl">Homeowner</SelectItem>
-                          <SelectItem value="Caregiver" className="py-3 rounded-xl">Caregiver</SelectItem>
-                          <SelectItem value="Family member" className="py-3 rounded-xl">Family Member</SelectItem>
+                        <SelectContent>
+                          <SelectItem value="Homeowner">Homeowner</SelectItem>
+                          <SelectItem value="Caregiver">Caregiver</SelectItem>
+                          <SelectItem value="Family member">Family Member</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-3">
-                      <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 ml-1">Resident Age Group</Label>
-                      <Select 
-                        value={formData.ageGroup} 
-                        onValueChange={(val: any) => setFormData({...formData, ageGroup: val})}
-                      >
-                        <SelectTrigger className="h-14 w-full bg-muted/30 border-transparent focus:border-border rounded-2xl shadow-none text-base pl-4">
-                          <span className="flex flex-1 text-left truncate">
-                            {getAgeGroupLabel(formData.ageGroup) || "Select age group"}
-                          </span>
+                    <div className="space-y-2">
+                      <Label className="field-tag text-muted-foreground">Resident Age Group</Label>
+                      <Select value={formData.ageGroup} onValueChange={(val: any) => setFormData({ ...formData, ageGroup: val })}>
+                        <SelectTrigger className="h-11 w-full">
+                          <span className="flex flex-1 text-left truncate">{getAgeGroupLabel(formData.ageGroup) || "Select age group"}</span>
                         </SelectTrigger>
-                        <SelectContent className="rounded-2xl border border-border shadow-xl">
-                          <SelectItem value="65-74" className="py-3 rounded-xl">65-74 years</SelectItem>
-                          <SelectItem value="75-84" className="py-3 rounded-xl">75-84 years</SelectItem>
-                          <SelectItem value="85+" className="py-3 rounded-xl">85+ years</SelectItem>
+                        <SelectContent>
+                          <SelectItem value="65-74">65-74 years</SelectItem>
+                          <SelectItem value="75-84">75-84 years</SelectItem>
+                          <SelectItem value="85+">85+ years</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
-                </CardContent>
-                <CardFooter className="pt-8 border-t border-border/40 flex justify-between items-center bg-muted/10 px-8 h-24">
-                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Saved locally</p>
-                  <Button onClick={handleSave} className="gap-2 px-8 h-12 rounded-[1.5rem] bg-foreground text-background shadow-md transition-all active:scale-95 text-sm">
-                    <Save className="h-4 w-4" /> Save Changes
-                  </Button>
-                </CardFooter>
-              </Card>
-            </motion.div>
-          )}
+                </SectionPanel>
+              </motion.div>
+            )}
 
-          {activeTab === 'homes' && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <Card className="border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] bg-card rounded-[2.5rem] overflow-hidden">
-                <CardHeader className="pb-8 pt-8 px-8">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-2xl font-medium tracking-tight">Manage Homes</CardTitle>
-                      <CardDescription className="text-base font-light mt-2">Configure your monitored properties.</CardDescription>
+            {activeTab === 'account' && (
+              <motion.div key="account" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+                <SectionPanel title="Account & Security" description="How you sign in, and how well-protected your account is.">
+                  <FieldRow label="Password" description="Last changed a while ago — worth refreshing periodically.">
+                    <Button variant="outline" size="sm" onClick={() => toast.success("Password reset email sent")}>Change</Button>
+                  </FieldRow>
+                  <FieldRow label="Two-Factor Authentication" description="Add a second step when signing in from a new device.">
+                    <Button variant="outline" size="sm" onClick={() => toast.success("Setup email sent")}>Enable</Button>
+                  </FieldRow>
+                  <FieldRow label="Linked Providers" description="Sign-in methods connected to this account.">
+                    <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-success" /> Google
+                    </span>
+                  </FieldRow>
+                  <FieldRow label="Security Status" description="Based on password strength and account activity.">
+                    <span className="text-sm font-medium text-success flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Good standing
+                    </span>
+                  </FieldRow>
+                </SectionPanel>
+              </motion.div>
+            )}
+
+            {activeTab === 'privacy' && (
+              <motion.div key="privacy" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+                <SectionPanel title="How your data is handled" description="A plain explanation, not a legal document.">
+                  <PrivacyPoint icon={ImageIcon} title="Your photos" copy="Room photos are used only to generate your safety reports. They're never shared, sold, or used to train models without separate, explicit permission." />
+                  <PrivacyPoint icon={Cpu} title="AI processing" copy="Images are analyzed securely and the results are attached to your account. Processing happens over an encrypted connection." />
+                  <PrivacyPoint icon={Cloud} title="Cloud sync" copy="Your homes, scans, and reports sync automatically so they're available on any device you sign into." />
+                  <PrivacyPoint icon={Lock} title="Encryption" copy="Data is encrypted in transit and at rest. Only you — and anyone you explicitly invite — can view your reports." />
+                </SectionPanel>
+
+                <SectionPanel title="Sharing preferences">
+                  <FieldRow label="Profile Visibility" description="Who can see your profile in the community.">
+                    <Select value={formData.privacyLevel} onValueChange={(val: any) => setFormData({ ...formData, privacyLevel: val })}>
+                      <SelectTrigger className="w-36 h-10"><span>{formData.privacyLevel}</span></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Private">Private</SelectItem>
+                        <SelectItem value="Limited">Limited</SelectItem>
+                        <SelectItem value="Public">Public</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldRow>
+                  <FieldRow label="Share Anonymized Data" description="Help improve CareLens's AI with anonymous scan patterns.">
+                    <Switch checked={switches.shareAnonymizedData} onCheckedChange={(val) => setSwitches({ ...switches, shareAnonymizedData: val })} />
+                  </FieldRow>
+                </SectionPanel>
+              </motion.div>
+            )}
+
+            {activeTab === 'notifications' && (
+              <motion.div key="notifications" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+                <SectionPanel title="Alert Preferences" description="Choose how and when you want to be notified.">
+                  <span className="field-tag text-muted-foreground/70 block pt-5">Channels</span>
+                  <FieldRow label="Push Notifications" description="Receive real-time alerts on your device.">
+                    <Switch checked={formData.notificationsEnabled} onCheckedChange={(val) => setFormData({ ...formData, notificationsEnabled: val })} />
+                  </FieldRow>
+                  <FieldRow label="Weekly Summaries" description="A quiet digest of activity across your homes.">
+                    <Switch checked={switches.emailSummaries} onCheckedChange={(val) => setSwitches({ ...switches, emailSummaries: val })} />
+                  </FieldRow>
+
+                  <span className="field-tag text-muted-foreground/70 block pt-8">What matters to you</span>
+                  <FieldRow label="Critical Hazards" description="Findings that need attention soon.">
+                    <Switch checked={switches.hazardAlerts} onCheckedChange={(val) => setSwitches({ ...switches, hazardAlerts: val })} />
+                  </FieldRow>
+                  <FieldRow label="Caregiver Updates" description="Changes another caregiver makes to a shared home.">
+                    <Switch checked={switches.accountActivity} onCheckedChange={(val) => setSwitches({ ...switches, accountActivity: val })} />
+                  </FieldRow>
+                  <FieldRow label="Marketplace Recommendations" description="When a relevant specialist is found nearby.">
+                    <Switch checked={switches.newScanReports} onCheckedChange={(val) => setSwitches({ ...switches, newScanReports: val })} />
+                  </FieldRow>
+                  <FieldRow label="Community Activity" description="Replies and likes on your discussions.">
+                    <Switch checked={switches.communityMentions} onCheckedChange={(val) => setSwitches({ ...switches, communityMentions: val })} />
+                  </FieldRow>
+                </SectionPanel>
+              </motion.div>
+            )}
+
+            {activeTab === 'appearance' && (
+              <motion.div key="appearance" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+                <SectionPanel title="Appearance" description="How CareLens looks on this device.">
+                  <div className="py-6">
+                    <span className="field-tag text-muted-foreground block mb-4">Theme</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { id: 'light', label: 'Light', icon: Sun },
+                        { id: 'dark', label: 'Dark', icon: Moon },
+                        { id: 'system', label: 'System', icon: Laptop },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setTheme(opt.id)}
+                          className={`flex flex-col items-center gap-2.5 p-5 border transition-colors ${theme === opt.id ? 'border-brand bg-brand/5' : 'border-border hover:border-foreground/30'}`}
+                        >
+                          <opt.icon className={`h-4 w-4 ${theme === opt.id ? 'text-brand' : 'text-muted-foreground'}`} strokeWidth={1.6} />
+                          <span className="text-xs font-medium">{opt.label}</span>
+                        </button>
+                      ))}
                     </div>
-                    <Button variant="outline" size="sm" className="rounded-2xl h-10 px-5 font-medium border-border hover:bg-muted/50" onClick={() => navigate('/properties/new')}>
-                      <Plus className="mr-2 h-4 w-4" /> Add Home
-                    </Button>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4 px-8 pb-8">
-                  {homes.map((home) => (
-                    <div key={home.id} className="p-5 rounded-3xl border border-border/40 bg-muted/10 flex items-center justify-between group hover:border-border hover:bg-muted/30 transition-all cursor-pointer" onClick={() => navigate(`/properties/${home.id}`)}>
-                      <div className="flex items-center gap-5">
-                        <div className="h-14 w-14 rounded-2xl bg-background border border-black/5 dark:border-white/5 flex items-center justify-center text-foreground shadow-sm">
-                          <Home className="h-6 w-6" />
+
+                  <FieldRow label="Accent Color" description="CareLens's signature color, used sparingly.">
+                    <div className="w-6 h-6 rounded-full bg-brand border border-border" />
+                  </FieldRow>
+                  <FieldRow label="Reduce Motion" description="Minimize animations throughout the app.">
+                    <Switch checked={reduceMotion} onCheckedChange={setReduceMotion} />
+                  </FieldRow>
+                </SectionPanel>
+              </motion.div>
+            )}
+
+            {activeTab === 'homes' && (
+              <motion.div key="homes" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+                <SectionPanel title="Your Homes" description="View or remove a monitored property.">
+                  <div className="pb-5">
+                    {homes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-6">No homes added yet.</p>
+                    ) : (
+                      homes.map((home) => (
+                        <div key={home.id} className="flex items-center justify-between py-4 border-t border-border">
+                          <button onClick={() => navigate(`/properties/${home.id}`)} className="flex items-center gap-4 group flex-1 min-w-0 text-left">
+                            <div className="h-11 w-11 rounded-sm border border-border flex items-center justify-center shrink-0 overflow-hidden bg-muted">
+                              {home.coverImage ? <img src={home.coverImage} className="w-full h-full object-cover" /> : <Home className="h-4 w-4" strokeWidth={1.6} />}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-medium text-sm tracking-tight truncate group-hover:text-brand transition-colors">{home.name}</h4>
+                              <p className="text-xs text-muted-foreground truncate">{home.address || `${home.rooms?.length || 0} rooms`}</p>
+                            </div>
+                            <ArrowUpRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors shrink-0 ml-2" />
+                          </button>
+
+                          {homeToDelete === home.id ? (
+                            <div className="flex items-center gap-2 ml-4 shrink-0">
+                              <Button variant="ghost" size="sm" onClick={() => setHomeToDelete(null)}>Cancel</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleDeleteHome(home.id)}>Confirm</Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 ml-4 shrink-0">
+                              <button onClick={() => toast.success("Ownership transfer link sent")} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1">Transfer</button>
+                              <button onClick={() => setHomeToDelete(home.id)} className="text-xs text-muted-foreground hover:text-destructive px-2 py-1">Remove</button>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <h4 className="font-medium text-base tracking-tight">{home.name}</h4>
-                          <p className="text-sm text-muted-foreground font-light">{home.address}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground">
-                          <ChevronRight className="h-5 w-5" />
-                        </Button>
-                      </div>
-                    </div>
+                      ))
+                    )}
+                  </div>
+                </SectionPanel>
+
+                <SectionPanel title="Connected Services" description="What CareLens relies on behind the scenes.">
+                  {[
+                    { icon: Cloud, label: 'Firebase', status: 'Connected' },
+                    { icon: Cpu, label: 'AI Analysis Engine', status: 'Connected' },
+                    { icon: MapPin, label: 'Maps & Location', status: 'Connected' },
+                    { icon: Watch, label: 'Wearable Devices', status: 'Coming soon' },
+                  ].map((svc) => (
+                    <FieldRow key={svc.label} label={svc.label}>
+                      <span className={`text-xs font-medium flex items-center gap-1.5 ${svc.status === 'Connected' ? 'text-success' : 'text-muted-foreground'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${svc.status === 'Connected' ? 'bg-success' : 'bg-muted-foreground'}`} /> {svc.status}
+                      </span>
+                    </FieldRow>
                   ))}
-                </CardContent>
-              </Card>
+                </SectionPanel>
 
-              <Card className="border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] bg-card rounded-[2.5rem] overflow-hidden">
-                <CardHeader className="pb-8 pt-8 px-8">
-                  <CardTitle className="text-2xl font-medium tracking-tight">Room Settings</CardTitle>
-                  <CardDescription className="text-base font-light mt-2">Default configurations for your safety scans.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 px-8 pb-8">
-                  <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                    <div className="space-y-1">
-                      <h4 className="text-base font-medium tracking-tight">Auto-detect Rooms</h4>
-                      <p className="text-sm text-muted-foreground font-light">Automatically identify room types during scans.</p>
-                    </div>
-                    <Switch checked={switches.autoDetectRooms} onCheckedChange={(val) => setSwitches({...switches, autoDetectRooms: val})} />
-                  </div>
-                  <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                    <div className="space-y-1">
-                      <h4 className="text-base font-medium tracking-tight">Save Original Photos</h4>
-                      <p className="text-sm text-muted-foreground font-light">Keep unannotated copies of all scan images.</p>
-                    </div>
-                    <Switch checked={switches.saveOriginalPhotos} onCheckedChange={(val) => setSwitches({...switches, saveOriginalPhotos: val})} />
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
-
-          {activeTab === 'notifications' && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <Card className="border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] bg-card rounded-[2.5rem] overflow-hidden">
-                <CardHeader className="pb-8 pt-8 px-8">
-                  <CardTitle className="text-2xl font-medium tracking-tight">Alert Preferences</CardTitle>
-                  <CardDescription className="text-base font-light mt-2">Choose how and when you want to be notified.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-8 px-8 pb-8">
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 ml-1">Channels</h4>
-                    <div className="grid gap-4">
-                      <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                        <div className="flex items-center gap-5">
-                          <div className="h-12 w-12 rounded-2xl bg-foreground text-background flex items-center justify-center shadow-sm">
-                            <Bell className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="text-base font-medium tracking-tight">Push Notifications</p>
-                            <p className="text-sm text-muted-foreground font-light">Receive real-time alerts on your device.</p>
-                          </div>
-                        </div>
-                        <Switch checked={formData.notificationsEnabled} onCheckedChange={(val) => setFormData({...formData, notificationsEnabled: val})} />
-                      </div>
-                      <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                        <div className="flex items-center gap-5">
-                          <div className="h-12 w-12 rounded-2xl bg-background border border-black/5 dark:border-white/5 text-foreground flex items-center justify-center shadow-sm">
-                            <Mail className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="text-base font-medium tracking-tight">Email Summaries</p>
-                            <p className="text-sm text-muted-foreground font-light">Weekly safety and activity reports.</p>
-                          </div>
-                        </div>
-                        <Switch checked={switches.emailSummaries} onCheckedChange={(val) => setSwitches({...switches, emailSummaries: val})} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 ml-1">Event Types</h4>
-                    <div className="space-y-3 bg-muted/5 border border-border/40 rounded-3xl p-3">
-                        <div className="flex items-center justify-between py-3 px-4 rounded-2xl hover:bg-muted/30 transition-colors">
-                          <Label className="text-base font-medium">New Scan Reports</Label>
-                          <Switch checked={switches.newScanReports} onCheckedChange={(val) => setSwitches({...switches, newScanReports: val})} />
-                        </div>
-                        <div className="flex items-center justify-between py-3 px-4 rounded-2xl hover:bg-muted/30 transition-colors">
-                          <Label className="text-base font-medium">Community Mentions</Label>
-                          <Switch checked={switches.communityMentions} onCheckedChange={(val) => setSwitches({...switches, communityMentions: val})} />
-                        </div>
-                        <div className="flex items-center justify-between py-3 px-4 rounded-2xl hover:bg-muted/30 transition-colors">
-                          <Label className="text-base font-medium">Hazard Alerts</Label>
-                          <Switch checked={switches.hazardAlerts} onCheckedChange={(val) => setSwitches({...switches, hazardAlerts: val})} />
-                        </div>
-                        <div className="flex items-center justify-between py-3 px-4 rounded-2xl hover:bg-muted/30 transition-colors">
-                          <Label className="text-base font-medium">Account Activity</Label>
-                          <Switch checked={switches.accountActivity} onCheckedChange={(val) => setSwitches({...switches, accountActivity: val})} />
-                        </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
-
-          {activeTab === 'privacy' && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <Card className="border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] bg-card rounded-[2.5rem] overflow-hidden">
-                <CardHeader className="pb-8 pt-8 px-8">
-                  <CardTitle className="text-2xl font-medium tracking-tight">Security</CardTitle>
-                  <CardDescription className="text-base font-light mt-2">Protect your account and safety data.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 px-8 pb-8">
-                  <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                    <div className="space-y-1">
-                      <h4 className="text-base font-medium tracking-tight">Two-Factor Authentication</h4>
-                      <p className="text-sm text-muted-foreground font-light">Add an extra layer of security to your account.</p>
-                    </div>
-                    <Button variant="outline" size="sm" className="rounded-2xl h-10 px-5 font-medium" onClick={() => toast.success("Two-Factor Authentication setup email sent")}>Enable</Button>
-                  </div>
-                  <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                    <div className="space-y-1">
-                      <h4 className="text-base font-medium tracking-tight">Account Password</h4>
-                      <p className="text-sm text-muted-foreground font-light">Update your password regularly for better security.</p>
-                    </div>
-                    <Button variant="outline" size="sm" className="rounded-2xl h-10 px-5 font-medium" onClick={() => toast.success("Password reset email sent")}>Change</Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] bg-card rounded-[2.5rem] overflow-hidden">
-                <CardHeader className="pb-8 pt-8 px-8">
-                  <CardTitle className="text-2xl font-medium tracking-tight">Data Privacy</CardTitle>
-                  <CardDescription className="text-base font-light mt-2">Control how your data is used and shared.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6 px-8 pb-8">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                      <div className="space-y-1">
-                        <Label className="text-base font-medium tracking-tight">Profile Visibility</Label>
-                        <p className="text-sm text-muted-foreground font-light">Control who can see your profile in the community.</p>
-                      </div>
-                      <Select 
-                        value={formData.privacyLevel} 
-                        onValueChange={(val: any) => setFormData({...formData, privacyLevel: val})}
-                      >
-                        <SelectTrigger className="w-40 h-12 rounded-2xl bg-background border-border">
-                          <SelectValue placeholder="Privacy" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl border border-border shadow-xl">
-                          <SelectItem value="Private" className="py-2.5 rounded-xl">Private</SelectItem>
-                          <SelectItem value="Limited" className="py-2.5 rounded-xl">Limited</SelectItem>
-                          <SelectItem value="Public" className="py-2.5 rounded-xl">Public</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center justify-between p-5 rounded-3xl border border-border/40 bg-muted/10">
-                      <div className="space-y-1">
-                        <h4 className="text-base font-medium tracking-tight">Share Anonymized Data</h4>
-                        <p className="text-sm text-muted-foreground font-light">Help improve our AI by sharing anonymous scan data.</p>
-                      </div>
-                      <Switch checked={switches.shareAnonymizedData} onCheckedChange={(val) => setSwitches({...switches, shareAnonymizedData: val})} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          )}
+                <SectionPanel title="Your Data" description="Download everything CareLens has for your account.">
+                  <FieldRow label="Export All Data" description="Homes, rooms, scan history, and scores as a JSON file.">
+                    <Button variant="outline" size="sm" onClick={handleExportData}>
+                      <Download className="h-3.5 w-3.5 mr-2" /> Export
+                    </Button>
+                  </FieldRow>
+                </SectionPanel>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

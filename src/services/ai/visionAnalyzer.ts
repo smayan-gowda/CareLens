@@ -1,13 +1,14 @@
 import { SafetyAnalysis } from "./schemas";
 
-export async function analyzeRoomImage(imageBase64: string, roomType?: string): Promise<SafetyAnalysis> {
+export async function analyzeRoomImage(imageBase64: string | string[], roomType?: string): Promise<SafetyAnalysis> {
   const response = await fetch("/api/analyze-room", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      imageBase64,
+      imageBase64: Array.isArray(imageBase64) ? imageBase64[0] : imageBase64,
+      imagesBase64: Array.isArray(imageBase64) ? imageBase64 : [imageBase64],
       roomType,
     }),
   });

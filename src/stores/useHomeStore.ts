@@ -9,6 +9,8 @@ import {
   Notification 
 } from '@/types/home';
 import { db, handleFirestoreError, OperationType, cleanUndefined } from '@/lib/firebase';
+import { compressImageDataUrl } from '@/utils/imageCompression';
+import { processImageForStorage, deleteImageFromStorage } from '@/services/storageService';
 import { 
   collection, 
   query, 
@@ -22,6 +24,96 @@ import {
   serverTimestamp,
   getDocs
 } from 'firebase/firestore';
+
+async function sanitizeRoom(r: Room): Promise<Room> {
+  const coverImage = r.coverImage ? await processImageForStorage(r.coverImage) : undefined;
+  
+  const recentImages = r.images || [];
+  const processedImages = await Promise.all(
+    recentImages.map(async (img) => ({
+      ...img,
+      url: await processImageForStorage(img.url),
+    }))
+  );
+
+  return {
+    ...r,
+    coverImage,
+    images: processedImages,
+  };
+}
+
+async function sanitizeHome(homeData: Partial<Home>): Promise<Partial<Home>> {
+  let coverImage = homeData.coverImage ? await processImageForStorage(homeData.coverImage) : undefined;
+  let rooms = homeData.rooms;
+  if (rooms) {
+    rooms = await Promise.all(rooms.map(r => sanitizeRoom(r)));
+  }
+
+  let result: Partial<Home> = {
+    ...homeData,
+    coverImage,
+    ...(rooms ? { rooms } : {}),
+  };
+
+  // Firestore hard document limit is 1,048,576 bytes (~1.048 MB). Target ceiling: 750,000 bytes.
+  const FIRESTORE_MAX_BYTES = 750000;
+
+  let strLen = JSON.stringify(result).length;
+
+  // Gradual compression tiers ONLY for unhosted local base64 fallback images if document exceeds safe size
+  const tiers = [
+    { maxDim: 1600, quality: 0.82, targetKB: 200 },
+    { maxDim: 1280, quality: 0.75, targetKB: 120 },
+    { maxDim: 800, quality: 0.65, targetKB: 70 },
+  ];
+
+  for (const tier of tiers) {
+    if (strLen <= FIRESTORE_MAX_BYTES) break;
+
+    if (result.rooms) {
+      result.rooms = await Promise.all(
+        result.rooms.map(async (r) => {
+          const compressed = await Promise.all(
+            (r.images || []).map(async (img) => {
+              // NEVER compress or touch hosted HTTP/HTTPS URLs (e.g. Firebase or Supabase Storage)
+              if (!img.url || img.url.startsWith("http://") || img.url.startsWith("https://")) {
+                return img;
+              }
+              return {
+                ...img,
+                url: await compressImageDataUrl(img.url, tier.maxDim, tier.maxDim, tier.quality, tier.targetKB, true),
+              };
+            })
+          );
+          return {
+            ...r,
+            coverImage: r.coverImage && !r.coverImage.startsWith("http") ? await compressImageDataUrl(r.coverImage, tier.maxDim, tier.maxDim, tier.quality, tier.targetKB, true) : r.coverImage,
+            images: compressed,
+          };
+        })
+      );
+    }
+
+    if (result.coverImage && !result.coverImage.startsWith("http")) {
+      result.coverImage = await compressImageDataUrl(result.coverImage, tier.maxDim, tier.maxDim, tier.quality, tier.targetKB, true);
+    }
+
+    strLen = JSON.stringify(result).length;
+  }
+
+  // Safety fallback if document size is still > 750KB due to many raw base64 images
+  if (strLen > FIRESTORE_MAX_BYTES && result.rooms) {
+    result.rooms = result.rooms.map((r) => ({
+      ...r,
+      images: (r.images || []).filter(img => img.url.startsWith("http")).concat(
+        (r.images || []).filter(img => !img.url.startsWith("http")).slice(-2)
+      )
+    }));
+  }
+
+  return result;
+}
 
 interface HomeStore {
   homes: Home[];
@@ -119,8 +211,9 @@ export const useHomeStore = create<HomeStore>()(
 
   addHome: async (userId, homeData) => {
     try {
+      const sanitized = await sanitizeHome(homeData);
       const newHome = cleanUndefined({
-        ...homeData,
+        ...sanitized,
         userId,
         rooms: [],
         createdAt: new Date().toISOString(),
@@ -141,122 +234,267 @@ export const useHomeStore = create<HomeStore>()(
   },
 
   updateHome: async (id, homeData) => {
-    const homeRef = doc(db, 'homes', id);
-    await updateDoc(homeRef, cleanUndefined({
-      ...homeData,
-      updatedAt: new Date().toISOString()
-    }));
+    try {
+      const home = get().homes.find(h => h.id === id);
+
+      // Delete old cover photo if replaced with a new one
+      if (home && home.coverImage && homeData.coverImage && home.coverImage !== homeData.coverImage) {
+        deleteImageFromStorage(home.coverImage).catch((err) =>
+          console.warn("Error deleting replaced home cover:", err)
+        );
+      }
+
+      const merged = home ? { ...home, ...homeData } : homeData;
+      const sanitized = await sanitizeHome(merged);
+
+      // Optimistic update
+      set(state => ({
+        homes: state.homes.map(h => h.id === id ? { ...h, ...sanitized } as Home : h)
+      }));
+
+      const homeRef = doc(db, 'homes', id);
+      await updateDoc(homeRef, cleanUndefined({
+        ...sanitized,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `homes/${id}`);
+    }
   },
 
   deleteHome: async (id) => {
-    await deleteDoc(doc(db, 'homes', id));
+    try {
+      const home = get().homes.find(h => h.id === id);
+      if (home) {
+        if (home.coverImage) deleteImageFromStorage(home.coverImage).catch(() => {});
+        if (home.rooms) {
+          for (const room of home.rooms) {
+            if (room.coverImage) deleteImageFromStorage(room.coverImage).catch(() => {});
+            if (room.images) {
+              for (const img of room.images) {
+                if (img.url) deleteImageFromStorage(img.url).catch(() => {});
+              }
+            }
+          }
+        }
+      }
+
+      set(state => ({ homes: state.homes.filter(h => h.id !== id) }));
+      await deleteDoc(doc(db, 'homes', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `homes/${id}`);
+    }
   },
 
   addRoom: async (homeId, roomData) => {
-    const home = get().homes.find(h => h.id === homeId);
-    if (!home) return;
+    try {
+      const home = get().homes.find(h => h.id === homeId);
+      if (!home) return;
 
-    const newRoom: Room = {
-      ...roomData,
-      id: `room-${Date.now()}`,
-      homeId,
-      images: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      const newRoom: Room = {
+        ...roomData,
+        id: `room-${Date.now()}`,
+        homeId,
+        images: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    const homeRef = doc(db, 'homes', homeId);
-    await updateDoc(homeRef, cleanUndefined({
-      rooms: [...home.rooms, newRoom],
-      updatedAt: new Date().toISOString()
-    }));
+      const sanitized = await sanitizeHome({
+        ...home,
+        rooms: [...(home.rooms || []), newRoom],
+      });
 
-    await addDoc(collection(db, 'activities'), cleanUndefined({
-      userId: home.userId,
-      homeId,
-      action: 'Added Room',
-      description: `Added ${newRoom.name} to the home`,
-      timestamp: new Date().toISOString()
-    }));
+      // Optimistic update
+      set(state => ({
+        homes: state.homes.map(h => h.id === homeId ? { ...h, ...sanitized } as Home : h)
+      }));
+
+      const homeRef = doc(db, 'homes', homeId);
+      await updateDoc(homeRef, cleanUndefined({
+        ...sanitized,
+        updatedAt: new Date().toISOString()
+      }));
+
+      await addDoc(collection(db, 'activities'), cleanUndefined({
+        userId: home.userId,
+        homeId,
+        action: 'Added Room',
+        description: `Added ${roomData.name} to the home`,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `homes/${homeId}/addRoom`);
+    }
   },
 
   updateRoom: async (homeId, roomId, roomData) => {
-    const home = get().homes.find(h => h.id === homeId);
-    if (!home) return;
+    try {
+      const home = get().homes.find(h => h.id === homeId);
+      if (!home) return;
 
-    const updatedRooms = home.rooms.map(r => 
-      r.id === roomId ? { ...r, ...roomData, updatedAt: new Date().toISOString() } : r
-    );
+      const currentRoom = home.rooms?.find(r => r.id === roomId);
+      // Delete old cover photo if replaced with a new one
+      if (currentRoom && currentRoom.coverImage && roomData.coverImage && currentRoom.coverImage !== roomData.coverImage) {
+        deleteImageFromStorage(currentRoom.coverImage).catch((err) =>
+          console.warn("Error deleting replaced room cover:", err)
+        );
+      }
 
-    const homeRef = doc(db, 'homes', homeId);
-    await updateDoc(homeRef, cleanUndefined({
-      rooms: updatedRooms,
-      updatedAt: new Date().toISOString()
-    }));
+      const updatedRooms = (home.rooms || []).map((r) => {
+        if (r.id === roomId) {
+          return { ...r, ...roomData, updatedAt: new Date().toISOString() };
+        }
+        return r;
+      });
+
+      const sanitized = await sanitizeHome({
+        ...home,
+        rooms: updatedRooms,
+      });
+
+      // Optimistic update
+      set(state => ({
+        homes: state.homes.map(h => h.id === homeId ? { ...h, ...sanitized } as Home : h)
+      }));
+
+      const homeRef = doc(db, 'homes', homeId);
+      await updateDoc(homeRef, cleanUndefined({
+        ...sanitized,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `homes/${homeId}/updateRoom`);
+    }
   },
 
   deleteRoom: async (homeId, roomId) => {
-    const home = get().homes.find(h => h.id === homeId);
-    if (!home) return;
+    try {
+      const home = get().homes.find(h => h.id === homeId);
+      if (!home) return;
 
-    const updatedRooms = home.rooms.filter(r => r.id !== roomId);
+      const roomToDelete = home.rooms?.find(r => r.id === roomId);
+      if (roomToDelete) {
+        if (roomToDelete.coverImage) deleteImageFromStorage(roomToDelete.coverImage).catch(() => {});
+        if (roomToDelete.images) {
+          for (const img of roomToDelete.images) {
+            if (img.url) deleteImageFromStorage(img.url).catch(() => {});
+          }
+        }
+      }
 
-    const homeRef = doc(db, 'homes', homeId);
-    await updateDoc(homeRef, cleanUndefined({
-      rooms: updatedRooms,
-      updatedAt: new Date().toISOString()
-    }));
+      const updatedRooms = (home.rooms || []).filter(r => r.id !== roomId);
+
+      const sanitized = await sanitizeHome({
+        ...home,
+        rooms: updatedRooms,
+      });
+
+      // Optimistic update
+      set(state => ({
+        homes: state.homes.map(h => h.id === homeId ? { ...h, ...sanitized } as Home : h)
+      }));
+
+      const homeRef = doc(db, 'homes', homeId);
+      await updateDoc(homeRef, cleanUndefined({
+        ...sanitized,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `homes/${homeId}/deleteRoom`);
+    }
   },
 
   addImage: async (homeId, roomId, imageData) => {
-    const home = get().homes.find(h => h.id === homeId);
-    if (!home) return;
+    try {
+      const home = get().homes.find(h => h.id === homeId);
+      if (!home) return;
 
-    const newImage: RoomImage = {
-      ...imageData,
-      id: `img-${Date.now()}`,
-      roomId,
-      uploadedAt: new Date().toISOString()
-    };
+      const processedUrl = await processImageForStorage(imageData.url);
 
-    const updatedRooms = home.rooms.map(r => {
-      if (r.id === roomId) {
-        return { ...r, images: [...r.images, newImage], updatedAt: new Date().toISOString() };
-      }
-      return r;
-    });
+      const newImage: RoomImage = {
+        ...imageData,
+        url: processedUrl,
+        id: `img-${Date.now()}`,
+        roomId,
+        uploadedAt: new Date().toISOString()
+      };
 
-    const homeRef = doc(db, 'homes', homeId);
-    await updateDoc(homeRef, cleanUndefined({
-      rooms: updatedRooms,
-      updatedAt: new Date().toISOString()
-    }));
+      const updatedRooms = (home.rooms || []).map((r) => {
+        if (r.id === roomId) {
+          return {
+            ...r,
+            images: [...(r.images || []), newImage],
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return r;
+      });
 
-    await addDoc(collection(db, 'activities'), cleanUndefined({
-      userId: home.userId,
-      homeId,
-      action: 'Uploaded Image',
-      description: `Added a new image to one of the rooms`,
-      timestamp: new Date().toISOString()
-    }));
+      const sanitized = await sanitizeHome({
+        ...home,
+        rooms: updatedRooms,
+      });
+
+      // Optimistic update
+      set(state => ({
+        homes: state.homes.map(h => h.id === homeId ? { ...h, ...sanitized } as Home : h)
+      }));
+
+      const homeRef = doc(db, 'homes', homeId);
+      await updateDoc(homeRef, cleanUndefined({
+        ...sanitized,
+        updatedAt: new Date().toISOString()
+      }));
+
+      await addDoc(collection(db, 'activities'), cleanUndefined({
+        userId: home.userId,
+        homeId,
+        action: 'Uploaded Image',
+        description: `Added a new image to one of the rooms`,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `homes/${homeId}/addImage`);
+    }
   },
 
   deleteImage: async (homeId, roomId, imageId) => {
-    const home = get().homes.find(h => h.id === homeId);
-    if (!home) return;
+    try {
+      const home = get().homes.find(h => h.id === homeId);
+      if (!home) return;
 
-    const updatedRooms = home.rooms.map(r => {
-      if (r.id === roomId) {
-        return { ...r, images: r.images.filter(img => img.id !== imageId), updatedAt: new Date().toISOString() };
+      const room = home.rooms?.find(r => r.id === roomId);
+      const imgToDelete = room?.images?.find(i => i.id === imageId);
+      if (imgToDelete?.url) {
+        deleteImageFromStorage(imgToDelete.url).catch(err => console.warn("Error deleting image from storage:", err));
       }
-      return r;
-    });
 
-    const homeRef = doc(db, 'homes', homeId);
-    await updateDoc(homeRef, cleanUndefined({
-      rooms: updatedRooms,
-      updatedAt: new Date().toISOString()
-    }));
+      const updatedRooms = (home.rooms || []).map(r => {
+        if (r.id === roomId) {
+          return { ...r, images: (r.images || []).filter(img => img.id !== imageId), updatedAt: new Date().toISOString() };
+        }
+        return r;
+      });
+
+      const sanitized = await sanitizeHome({
+        ...home,
+        rooms: updatedRooms,
+      });
+
+      // Optimistic update
+      set(state => ({
+        homes: state.homes.map(h => h.id === homeId ? { ...h, ...sanitized } as Home : h)
+      }));
+
+      const homeRef = doc(db, 'homes', homeId);
+      await updateDoc(homeRef, cleanUndefined({
+        ...sanitized,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `homes/${homeId}/deleteImage`);
+    }
   },
 
   addActivity: async (userId, activityData) => {

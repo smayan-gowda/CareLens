@@ -2,12 +2,14 @@ import { ScanResult, Hazard, Recommendation } from '@/types/ai';
 import { analyzeRoomImage } from './visionAnalyzer';
 import { extractHazards } from './safetyAnalyzer';
 import { generateRecommendations } from './recommendationGenerator';
+import { compressImageDataUrl } from '@/utils/imageCompression';
 
-async function getBase64FromUrl(url: string): Promise<string> {
+async function getBase64FromUrl(url: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
     img.onload = () => {
+      const results: string[] = [];
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
@@ -25,13 +27,40 @@ async function getBase64FromUrl(url: string): Promise<string> {
         }
       }
       
+      // 1. Full image
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) return reject(new Error('Canvas context not found'));
       
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', 0.6));
+      results.push(canvas.toDataURL('image/jpeg', 0.6));
+      
+      // 2-5. Quadrants (Top-Left, Top-Right, Bottom-Left, Bottom-Right)
+      const quadWidth = width / 2;
+      const quadHeight = height / 2;
+      canvas.width = quadWidth;
+      canvas.height = quadHeight;
+      const qCtx = canvas.getContext('2d');
+      if (!qCtx) return reject(new Error('Canvas context not found'));
+      
+      // Top Left
+      qCtx.drawImage(img, 0, 0, img.width / 2, img.height / 2, 0, 0, quadWidth, quadHeight);
+      results.push(canvas.toDataURL('image/jpeg', 0.8));
+      
+      // Top Right
+      qCtx.drawImage(img, img.width / 2, 0, img.width / 2, img.height / 2, 0, 0, quadWidth, quadHeight);
+      results.push(canvas.toDataURL('image/jpeg', 0.8));
+      
+      // Bottom Left
+      qCtx.drawImage(img, 0, img.height / 2, img.width / 2, img.height / 2, 0, 0, quadWidth, quadHeight);
+      results.push(canvas.toDataURL('image/jpeg', 0.8));
+      
+      // Bottom Right
+      qCtx.drawImage(img, img.width / 2, img.height / 2, img.width / 2, img.height / 2, 0, 0, quadWidth, quadHeight);
+      results.push(canvas.toDataURL('image/jpeg', 0.8));
+      
+      resolve(results);
     };
     img.onerror = reject;
     img.src = url;
@@ -49,28 +78,29 @@ export const analysisService = {
     if (onProgress) onProgress(1, 15);
     
     // Process all images to base64 if they are client-side blob URLs
-    const processedImages = await Promise.all(
+    const processedImagesArrays = await Promise.all(
       images.map(async (img) => {
         if (img.startsWith('blob:')) {
           try {
             return await getBase64FromUrl(img);
           } catch (e) {
             console.error("Failed to convert blob to base64 inside analysisService:", e);
-            return img;
+            return [img];
           }
         }
-        return img;
+        return [img];
       })
     );
     
-    const base64Image = processedImages[0];
+    // Flatten array of arrays
+    const processedImages = processedImagesArrays.flat();
     
     if (onProgress) onProgress(2, 35);
     
     if (onProgress) onProgress(3, 55);
 
     try {
-      const result = await analyzeRoomImage(base64Image, "room");
+      const result = await analyzeRoomImage(processedImages, "room");
       
       if (onProgress) onProgress(4, 75);
       
@@ -90,12 +120,14 @@ export const analysisService = {
 
       if (onProgress) onProgress(6, 100);
 
+      const savedImage = await compressImageDataUrl(processedImages[0], 1280, 1280, 0.75, 250);
+
       return {
         id: scanId,
         roomId,
         homeId,
         createdAt: new Date().toISOString(),
-        images: processedImages,
+        images: [savedImage],
         status: 'Completed',
         safetyScore: result.overallSafetyScore,
         subScores: result.subScores,

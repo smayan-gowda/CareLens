@@ -17,6 +17,9 @@ import {
   getDocs
 } from 'firebase/firestore';
 
+import { compressImageDataUrl } from '@/utils/imageCompression';
+import { processImageForStorage } from '@/services/storageService';
+
 interface ScanState {
   scans: Record<string, ScanResult[]>;
   hiddenScans: string[];
@@ -30,6 +33,7 @@ interface ScanState {
   deleteScan: (roomId: string, scanId: string) => Promise<void>;
   getScansForRoom: (roomId: string) => ScanResult[];
   getScanById: (scanId: string) => ScanResult | undefined;
+  toggleRecommendation: (scanId: string, recommendationId: string) => Promise<boolean>;
 }
 
 export const useScanStore = create<ScanState>()(
@@ -68,13 +72,29 @@ export const useScanStore = create<ScanState>()(
 
       addScan: async (userId, roomId, scanData) => {
         const scanId = (scanData as any).id || `scan-${Date.now()}`;
-        const newScan = cleanUndefined({
+        let images = scanData.images 
+          ? await Promise.all(scanData.images.map(img => processImageForStorage(img)))
+          : scanData.images;
+
+        let newScan = cleanUndefined({
           ...scanData,
+          images,
           id: scanId,
           userId,
           roomId,
           createdAt: new Date().toISOString()
         });
+
+        // Ensure total scan size fits strictly under 1 MB limit (950,000 bytes max)
+        const SCAN_MAX_BYTES = 950000;
+        let strLen = JSON.stringify(newScan).length;
+        if (strLen > SCAN_MAX_BYTES && images && images.length > 0) {
+          images = await Promise.all(
+            images.map(img => (img.startsWith("http://") || img.startsWith("https://")) ? img : compressImageDataUrl(img, 3840, 3840, 0.95, 1000, true))
+          );
+          newScan = cleanUndefined({ ...newScan, images });
+        }
+
         try {
           await setDoc(doc(db, 'scans', scanId), newScan);
         } catch (error) {
@@ -181,6 +201,75 @@ export const useScanStore = create<ScanState>()(
           if (scan) return scan;
         }
         return undefined;
+      },
+
+      toggleRecommendation: async (scanId, recommendationId) => {
+        const scan = get().getScanById(scanId);
+        if (!scan) return false;
+
+        const userId = auth.currentUser?.uid || (scan as any).userId;
+        const initialScore = (scan as any).initialSafetyScore ?? scan.safetyScore;
+
+        let recTitle = '';
+        let recImpact = 0;
+        let isCompletedNow = false;
+
+        const updatedRecommendations = (scan.recommendations || []).map((r) => {
+          if (r.id === recommendationId) {
+            recTitle = r.title;
+            recImpact = r.expectedImpact || 0;
+            isCompletedNow = !r.completedAt;
+            return {
+              ...r,
+              completedAt: isCompletedNow ? new Date().toISOString() : undefined,
+            };
+          }
+          return r;
+        });
+
+        const completedRecs = updatedRecommendations.filter((r) => !!r.completedAt);
+        const totalCompletedGain = completedRecs.reduce((sum, r) => sum + (r.expectedImpact || 0), 0);
+        const newSafetyScore = Math.min(100, Math.round(initialScore + totalCompletedGain));
+
+        const updatedScan = {
+          ...scan,
+          initialSafetyScore: initialScore,
+          safetyScore: newSafetyScore,
+          recommendations: updatedRecommendations,
+        } as ScanResult;
+
+        set((state) => {
+          const newScans = { ...state.scans };
+          if (newScans[scan.roomId]) {
+            newScans[scan.roomId] = newScans[scan.roomId].map((s) => (s.id === scanId ? updatedScan : s));
+          }
+          return { scans: newScans };
+        });
+
+        try {
+          await updateDoc(doc(db, 'scans', scanId), cleanUndefined({
+            initialSafetyScore: initialScore,
+            safetyScore: newSafetyScore,
+            recommendations: updatedRecommendations,
+          }));
+
+          if (userId && isCompletedNow) {
+            await addDoc(collection(db, 'timelineEvents'), cleanUndefined({
+              userId,
+              homeId: scan.homeId,
+              roomId: scan.roomId,
+              scanId: scan.id,
+              title: `Resolved: ${recTitle}`,
+              description: `Completed recommendation (+${recImpact} pts). Room safety score is now ${newSafetyScore}.`,
+              type: 'improvement',
+              timestamp: new Date().toISOString(),
+            }));
+          }
+          return isCompletedNow;
+        } catch (error) {
+          console.error('Error updating recommendation status:', error);
+          return isCompletedNow;
+        }
       },
     }),
     {

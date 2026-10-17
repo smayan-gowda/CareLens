@@ -9,6 +9,7 @@ import { useAuthStore } from "./stores/useAuthStore";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Landing } from "./pages/Landing";
 import { LoginPage } from "./pages/LoginPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ScanPage } from "./pages/ScanPage";
 import { HomesPage } from "./pages/HomesPage";
@@ -70,6 +71,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           
           <Route element={<ProtectedRoute />}>
+            <Route path="/welcome" element={<OnboardingPage />} />
+
             <Route element={<AppLayout />}>
               <Route path="/overview" element={<DashboardPage />} />
               <Route path="/scan" element={<ScanPage />} />

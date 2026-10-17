@@ -1,17 +1,23 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 @import "@fontsource-variable/geist";
+@import "@fontsource/instrument-serif";
+@import "@fontsource/instrument-serif/400-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-heading: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-display: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-narrative: 'Instrument Serif', ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 
   --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-sm: calc(var(--radius) - 5px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 
   --color-border: var(--border);
   --color-input: var(--input);
@@ -36,68 +42,196 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+
+  --shadow-whisper: var(--elevation-whisper);
+  --shadow-soft: var(--elevation-soft);
+  --shadow-lifted: var(--elevation-lifted);
+  --shadow-floating: var(--elevation-floating);
+
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
   :root {
-    --background: oklch(0.99 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.965 0 0);
-    --secondary-foreground: oklch(0.145 0 0);
-    --muted: oklch(0.965 0 0);
-    --muted-foreground: oklch(0.45 0 0);
-    --accent: oklch(0.965 0 0);
-    --accent-foreground: oklch(0.145 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.985 0 0);
-    --success: oklch(0.6 0.15 140);
-    --success-foreground: oklch(0.985 0 0);
-    --warning: oklch(0.75 0.15 70);
-    --warning-foreground: oklch(0.145 0 0);
-    --border: oklch(0.92 0 0);
-    --input: oklch(0.92 0 0);
-    --ring: oklch(0.8 0 0);
+    /* Warm survey paper, not cool SaaS gray */
+    --background: oklch(0.965 0.014 80);
+    --foreground: oklch(0.19 0.025 265);
+    --card: oklch(0.985 0.009 80);
+    --card-foreground: oklch(0.19 0.025 265);
+    --popover: oklch(0.99 0.007 80);
+    --popover-foreground: oklch(0.19 0.025 265);
+    --primary: oklch(0.19 0.025 265);
+    --primary-foreground: oklch(0.98 0.008 80);
+    --secondary: oklch(0.92 0.015 78);
+    --secondary-foreground: oklch(0.19 0.025 265);
+    --muted: oklch(0.92 0.015 78);
+    --muted-foreground: oklch(0.46 0.025 260);
+    --accent: oklch(0.89 0.02 75);
+    --accent-foreground: oklch(0.19 0.025 265);
+
+    /* Marker-pen orange — the one loud color, used with intent */
+    --brand: oklch(0.63 0.19 42);
+    --brand-foreground: oklch(0.99 0.006 80);
+
+    --destructive: oklch(0.55 0.2 27);
+    --destructive-foreground: oklch(0.98 0.006 80);
+    --success: oklch(0.4 0.085 155);
+    --success-foreground: oklch(0.98 0.006 80);
+    --warning: oklch(0.7 0.14 68);
+    --warning-foreground: oklch(0.18 0.03 68);
+
+    --border: oklch(0.19 0.025 265 / 0.14);
+    --input: oklch(0.19 0.025 265 / 0.14);
+    --ring: var(--brand);
     --radius: 0.5rem;
+
+    --elevation-whisper: 0 1px 1px oklch(0.19 0.03 265 / 0.05);
+    --elevation-soft: 0 1px 0 oklch(0.19 0.03 265 / 0.05), 0 6px 16px -6px oklch(0.19 0.03 265 / 0.12);
+    --elevation-lifted: 0 2px 2px oklch(0.19 0.03 265 / 0.06), 0 14px 32px -10px oklch(0.19 0.03 265 / 0.18);
+    --elevation-floating: 0 4px 6px oklch(0.19 0.03 265 / 0.08), 0 24px 48px -14px oklch(0.19 0.03 265 / 0.26);
   }
- 
+
   .dark {
-    --background: oklch(0.13 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.145 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.145 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.985 0 0);
-    --primary-foreground: oklch(0.145 0 0);
-    --secondary: oklch(0.18 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.18 0 0);
-    --muted-foreground: oklch(0.65 0 0);
-    --accent: oklch(0.18 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.985 0 0);
-    --success: oklch(0.7 0.15 140);
-    --success-foreground: oklch(0.145 0 0);
-    --warning: oklch(0.85 0.15 70);
-    --warning-foreground: oklch(0.145 0 0);
-    --border: oklch(0.2 0 0);
-    --input: oklch(0.2 0 0);
-    --ring: oklch(0.3 0 0);
+    --background: oklch(0.17 0.02 260);
+    --foreground: oklch(0.95 0.012 80);
+    --card: oklch(0.205 0.022 260);
+    --card-foreground: oklch(0.95 0.012 80);
+    --popover: oklch(0.205 0.022 260);
+    --popover-foreground: oklch(0.95 0.012 80);
+    --primary: oklch(0.95 0.012 80);
+    --primary-foreground: oklch(0.17 0.02 260);
+    --secondary: oklch(0.26 0.02 260);
+    --secondary-foreground: oklch(0.95 0.012 80);
+    --muted: oklch(0.26 0.02 260);
+    --muted-foreground: oklch(0.66 0.02 75);
+    --accent: oklch(0.3 0.022 260);
+    --accent-foreground: oklch(0.95 0.012 80);
+
+    --brand: oklch(0.68 0.18 42);
+    --brand-foreground: oklch(0.15 0.03 42);
+
+    --destructive: oklch(0.65 0.19 27);
+    --destructive-foreground: oklch(0.98 0.006 80);
+    --success: oklch(0.7 0.1 155);
+    --success-foreground: oklch(0.15 0.03 155);
+    --warning: oklch(0.76 0.13 68);
+    --warning-foreground: oklch(0.18 0.03 68);
+
+    --border: oklch(1 0 0 / 0.12);
+    --input: oklch(1 0 0 / 0.14);
+    --ring: var(--brand);
+
+    --elevation-whisper: 0 1px 1px oklch(0 0 0 / 0.25);
+    --elevation-soft: 0 1px 0 oklch(0 0 0 / 0.2), 0 6px 16px -6px oklch(0 0 0 / 0.4);
+    --elevation-lifted: 0 2px 2px oklch(0 0 0 / 0.25), 0 14px 32px -10px oklch(0 0 0 / 0.5);
+    --elevation-floating: 0 4px 6px oklch(0 0 0 / 0.3), 0 24px 48px -14px oklch(0 0 0 / 0.6);
   }
 }
- 
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
-    @apply bg-background text-foreground font-sans antialiased selection:bg-primary/10;
+    @apply bg-background text-foreground font-sans antialiased selection:bg-brand/20;
+    font-feature-settings: "ss01" 1, "cv11" 1;
+    text-rendering: optimizeLegibility;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--foreground), transparent 84%);
+    border-radius: 2px;
+    border: 2px solid var(--background);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--foreground), transparent 70%);
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+
+  /* Monospace field tag — replaces the old italic-serif eyebrow entirely */
+  .field-tag {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Technical corner brackets — the signature CareLens motif, stands in for
+     card borders / decorative icon squares everywhere a photo or panel needs
+     a frame. Four independent corners so it reads as a viewfinder / survey
+     mark, not a rounded box. */
+  .brackets {
+    position: relative;
+  }
+  .brackets::before,
+  .brackets::after,
+  .brackets > .bracket-tl,
+  .brackets > .bracket-br {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+  }
+  .brackets::before {
+    top: -1px; left: -1px;
+    border-top: 1.5px solid currentColor;
+    border-left: 1.5px solid currentColor;
+  }
+  .brackets::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+  }
+
+  .dashed-rule {
+    border-top-style: dashed;
+    border-top-width: 1px;
+    border-color: var(--border);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* The narrative voice — used only for the one emotional sentence per page
+     that tells the person how their home is doing. Never for UI chrome. */
+  .narrative {
+    font-family: var(--font-narrative);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  /* Warm photo vignette — replaces the flat black-gradient overlay with a
+     softer, warmer falloff so photography reads inviting, not clinical. */
+  .photo-vignette {
+    position: relative;
+  }
+  .photo-vignette::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, oklch(0.15 0.02 50 / 0) 40%, oklch(0.12 0.03 40 / 0.75) 100%);
   }
 }

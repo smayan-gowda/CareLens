@@ -1,7 +1,81 @@
 /**
- * Mock Storage Service
- * Abstracted to easily swap out for Firebase Storage in Stage 3.
+ * Storage Service
+ * Handles uploading images to Supabase Storage,
+ * preserving full original quality with hosted CDN URLs.
  */
+
+import { uploadToSupabaseStorage, deleteFromSupabaseStorage, isSupabaseConfigured } from "@/utils/supabaseStorage";
+import { compressImageDataUrl } from "@/utils/imageCompression";
+import { toast } from "sonner";
+
+export { isSupabaseConfigured };
+
+export async function deleteImageFromStorage(url: string, bucketName = "room-photos"): Promise<void> {
+  if (!url || typeof url !== "string") return;
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    if (isSupabaseConfigured()) {
+      await deleteFromSupabaseStorage(url, bucketName);
+    }
+  }
+}
+
+export async function processImageForStorage(
+  fileOrUrl: File | string,
+  oldUrlToDelete?: string
+): Promise<string> {
+  if (!fileOrUrl) return "";
+
+  // Delete previous photo if a replacement is provided
+  if (
+    oldUrlToDelete &&
+    typeof oldUrlToDelete === "string" &&
+    oldUrlToDelete !== fileOrUrl &&
+    (oldUrlToDelete.startsWith("http://") || oldUrlToDelete.startsWith("https://"))
+  ) {
+    deleteImageFromStorage(oldUrlToDelete).catch((e) =>
+      console.warn("Failed to delete old replaced image:", e)
+    );
+  }
+
+  if (typeof fileOrUrl === "string") {
+    if (fileOrUrl.startsWith("http://") || fileOrUrl.startsWith("https://")) {
+      return fileOrUrl;
+    }
+  }
+
+  // 1. Primary: Upload to Supabase Storage (100% free, full original resolution)
+  if (isSupabaseConfigured()) {
+    try {
+      const publicUrl = await uploadToSupabaseStorage(fileOrUrl, "room-photos");
+      if (publicUrl && publicUrl.startsWith("http")) {
+        return publicUrl;
+      }
+    } catch (err: any) {
+      console.warn("Supabase Storage upload error:", err);
+      toast.error(`Supabase upload error: ${err?.message || "Check storage bucket & API keys"}`);
+    }
+  } else {
+    console.warn("Supabase credentials (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) are not detected in environment.");
+  }
+
+  // 2. Local compressed base64 fallback (guarantees Firestore documents stay well under 1MB limit)
+  let rawBase64 = "";
+  if (fileOrUrl instanceof File) {
+    rawBase64 = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string) || "");
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(fileOrUrl);
+    });
+  } else {
+    rawBase64 = fileOrUrl;
+  }
+
+  if (!rawBase64) return "";
+
+  // Highly compressed local base64 fallback (~70KB) so Firestore write size is never exceeded if Supabase is offline
+  return compressImageDataUrl(rawBase64, 800, 800, 0.65, 70, true);
+}
 
 export interface StorageMetadata {
   name: string;
@@ -11,73 +85,26 @@ export interface StorageMetadata {
 }
 
 export const storageService = {
-  /**
-   * Simulates uploading a file to cloud storage
-   * @param path The storage path (e.g., 'homes/homeId/rooms/roomId/images')
-   * @param file The File object to upload
-   * @param onProgress Callback for upload progress
-   * @returns A promise that resolves to the download URL
-   */
   async uploadImage(
     path: string, 
     file: File, 
     onProgress?: (progress: number) => void
   ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      let progress = 0;
-      
-      const interval = setInterval(() => {
-        progress += Math.random() * 20 + 10; // Random progress chunks
-        
-        if (progress >= 100) {
-          progress = 100;
-          if (onProgress) onProgress(progress);
-          clearInterval(interval);
-          
-          // Generate a local object URL to simulate cloud storage URL
-          const url = URL.createObjectURL(file);
-          resolve(url);
-        } else {
-          if (onProgress) onProgress(progress);
-        }
-      }, 300); // Update every 300ms
-    });
+    if (onProgress) onProgress(30);
+    const url = await processImageForStorage(file);
+    if (onProgress) onProgress(100);
+    return url;
   },
 
-  /**
-   * Simulates deleting a file from cloud storage
-   * @param path The storage path or URL to delete
-   */
-  async deleteImage(path: string): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // In a real app, we'd revoke object URLs or delete from cloud
-        resolve();
-      }, 500);
-    });
+  async deleteImage(pathOrUrl: string): Promise<void> {
+    await deleteImageFromStorage(pathOrUrl);
   },
 
-  /**
-   * Retrieves images from a specific storage path
-   * @param path The storage directory path
-   */
   async getImages(path: string): Promise<string[]> {
-    // Simulated mock response
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([]);
-      }, 500);
-    });
+    return Promise.resolve([]);
   },
 
-  /**
-   * Updates metadata for a stored file
-   */
   async updateMetadata(path: string, metadata: Partial<StorageMetadata>): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve();
-      }, 300);
-    });
+    return Promise.resolve();
   }
 };

@@ -1,9 +1,62 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, LiveServerMessage, Modality } from "@google/genai";
 import { HfInference } from "@huggingface/inference";
+import { WebSocketServer } from "ws";
 import { ROOM_ANALYSIS_PROMPT } from "./src/services/ai/prompts";
+
+async function safeGenerateContent(ai: GoogleGenAI, params: any) {
+  const modelsToTry = [
+    "gemma-4-31b-it",
+    "gemini-flash-latest",
+    "gemini-3.6-flash",
+    "gemini-2.0-flash"
+  ];
+
+  let lastError: any = null;
+  for (const modelName of modelsToTry) {
+    try {
+      return await ai.models.generateContent({
+        ...params,
+        model: modelName
+      });
+    } catch (err: any) {
+      console.warn(`[AI Model Fallback] Model ${modelName} failed or quota reached:`, err?.message || err);
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+async function safeTranscribeAudio(ai: GoogleGenAI, wavBase64: string, promptText: string): Promise<string> {
+  const audioModels = [
+    "gemini-flash-latest",
+    "gemini-3.6-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash"
+  ];
+
+  for (const modelName of audioModels) {
+    try {
+      const res = await ai.models.generateContent({
+        model: modelName,
+        contents: [
+          { inlineData: { mimeType: "audio/wav", data: wavBase64 } },
+          { text: promptText }
+        ]
+      });
+      const text = res.text?.trim();
+      if (text && !text.toLowerCase().includes("[silence]") && !text.toLowerCase().includes("[no speech]")) {
+        return text;
+      }
+    } catch (err: any) {
+      console.warn(`[Audio Transcribe] Model ${modelName} failed:`, err?.message || err);
+    }
+  }
+  return "";
+}
 
 function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
   const normalizedType = (roomType || "Bathroom").trim().toLowerCase();
@@ -528,7 +581,7 @@ async function startServer() {
   // AI Route
   app.post("/api/analyze-room", async (req, res) => {
     try {
-      const { imageBase64, roomType } = req.body;
+      const { imageBase64, imagesBase64, roomType } = req.body;
       
       if (!process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: "Gemini API key is not configured on the server." });
@@ -543,39 +596,45 @@ async function startServer() {
         }
       });
       
-      // Ensure the base64 string doesn't have the data URL prefix for the SDK
-      let pureBase64 = imageBase64;
-      let mimeType = "image/jpeg";
+      const parts: any[] = [];
+      const imagesToProcess = imagesBase64 && Array.isArray(imagesBase64) && imagesBase64.length > 0 
+        ? imagesBase64 
+        : [imageBase64];
 
-      if (imageBase64.startsWith("http")) {
-        try {
-          const imgRes = await fetch(imageBase64);
-          if (!imgRes.ok) throw new Error(`HTTP error ${imgRes.status}`);
-          const buffer = await imgRes.arrayBuffer();
-          pureBase64 = Buffer.from(buffer).toString('base64');
-          mimeType = imgRes.headers.get('content-type') || "image/jpeg";
-        } catch (fetchErr) {
-          console.error("Failed to fetch remote image:", fetchErr);
-          return res.status(400).json({ error: "Failed to download remote room image for analysis." });
+      for (const imgBase64 of imagesToProcess) {
+        let pureBase64 = imgBase64;
+        let mimeType = "image/jpeg";
+
+        if (imgBase64.startsWith("http")) {
+          try {
+            const imgRes = await fetch(imgBase64);
+            if (!imgRes.ok) throw new Error(`HTTP error ${imgRes.status}`);
+            const buffer = await imgRes.arrayBuffer();
+            pureBase64 = Buffer.from(buffer).toString('base64');
+            mimeType = imgRes.headers.get('content-type') || "image/jpeg";
+          } catch (fetchErr) {
+            console.error("Failed to fetch remote image:", fetchErr);
+            continue; // Skip failed image instead of failing everything
+          }
+        } else if (imgBase64.startsWith("data:")) {
+          const splitParts = imgBase64.split(",");
+          pureBase64 = splitParts[1];
+          mimeType = splitParts[0].split(":")[1].split(";")[0];
         }
-      } else if (imageBase64.startsWith("data:")) {
-        const parts = imageBase64.split(",");
-        pureBase64 = parts[1];
-        mimeType = parts[0].split(":")[1].split(";")[0];
+
+        parts.push({
+          inlineData: {
+            mimeType,
+            data: pureBase64,
+          },
+        });
       }
 
-      const imagePart = {
-        inlineData: {
-          mimeType,
-          data: pureBase64,
-        },
-      };
+      const promptText = `The room type is ${roomType || 'unknown'}.\n\n${ROOM_ANALYSIS_PROMPT}\n\nIMPORTANT: You have been provided with multiple images. The FIRST image is the full room view. The subsequent images are zoomed-in quadrants of the same room to help you see more detail. ALL BOUNDING BOXES you return MUST be calculated relative to the FIRST (full) image.`;
+      parts.push({ text: promptText });
 
-      const promptText = `The room type is ${roomType || 'unknown'}.\n\n${ROOM_ANALYSIS_PROMPT}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: { parts: [imagePart, { text: promptText }] },
+      const response = await safeGenerateContent(ai, {
+        contents: { parts },
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -614,7 +673,7 @@ async function startServer() {
                       required: ["x", "y", "width", "height"]
                     }
                   },
-                  required: ["name", "confidence"]
+                  required: ["name", "confidence", "boundingBox"]
                 }
               },
               hazards: {
@@ -641,7 +700,7 @@ async function startServer() {
                       required: ["x", "y", "width", "height"]
                     }
                   },
-                  required: ["title", "category", "severity", "description", "location", "confidence", "objectsInvolved", "reasoning"]
+                  required: ["title", "category", "severity", "description", "location", "confidence", "objectsInvolved", "reasoning", "boundingBox"]
                 }
               },
               recommendations: {
@@ -686,17 +745,11 @@ async function startServer() {
         throw new Error("No text response from Gemini");
       }
       
-    } catch (error) {
-      console.warn("Gemini API failed or quota exceeded. Invoking smart visual fallback analysis.", error);
-      try {
-        const { roomType } = req.body;
-        const fallbackData = getFallbackRoomAnalysis(roomType);
-        console.log(`Successfully generated high-fidelity fallback safety report for room type: ${roomType || 'unknown'}`);
-        res.json(fallbackData);
-      } catch (fallbackErr) {
-        console.error("Critical: Fallback report generation failed:", fallbackErr);
-        res.status(500).json({ error: "Failed to analyze room image." });
-      }
+    } catch (error: any) {
+      console.error("Gemini API error:", error);
+      res.status(429).json({ 
+        error: "API rate limit exceeded. The free tier allows 5 requests per minute. Please wait 60 seconds and try again." 
+      });
     }
   });
 
@@ -760,8 +813,7 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
           },
         };
 
-        const geminiRes = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+        const geminiRes = await safeGenerateContent(ai, {
           contents: { parts: [promptImagePart, { text: promptText }] }
         });
 
@@ -964,8 +1016,7 @@ Return a JSON object containing:
 1. "category": The selected category name. It MUST be EXACTLY one of the 14 listed above. If it fits multiple, select the single best fitting category.
 2. "suggestedQuery": A simplified 1-2 word query representing the primary safety hardware/service mentioned (e.g. "grab bars", "led lighting", "non-slip flooring", "ramp") which can be used to search Yelp or product marketplaces.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+      const response = await safeGenerateContent(ai, {
         contents: promptText,
         config: {
           responseMimeType: "application/json",
@@ -1024,8 +1075,246 @@ Return a JSON object containing:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // Helper to convert raw PCM samples into a standard WAV buffer for Gemini API
+  function pcmToWavBuffer(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
+    const header = Buffer.alloc(44);
+    const dataSize = pcmBuffer.length;
+    const fileSize = dataSize + 36;
+    const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(fileSize, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(bitsPerSample, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmBuffer]);
+  }
+
+  // Setup WebSocket server for Gemini Live API
+  const wss = new WebSocketServer({ server });
+  
+  wss.on("connection", async (clientWs, request) => {
+    if (request.url !== '/api/live-walkthrough') return;
+    
+    if (!process.env.GEMINI_API_KEY) {
+      clientWs.close(1011, "No Gemini API Key");
+      return;
+    }
+    
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    // Buffers & timers to transcribe AI and user audio into verbatim text transcripts
+    let aiPcmChunks: Buffer[] = [];
+    let aiTranscriptionTimer: NodeJS.Timeout | null = null;
+    let userPcmChunks: Buffer[] = [];
+    let userTranscriptionTimer: NodeJS.Timeout | null = null;
+
+    const flushAiTranscription = async () => {
+      if (aiPcmChunks.length === 0) return;
+      const combinedPcm = Buffer.concat(aiPcmChunks);
+      aiPcmChunks = [];
+      if (combinedPcm.length < 24000 * 2 * 0.15) return; // Ignore under 0.15s
+
+      try {
+        const wavBuf = pcmToWavBuffer(combinedPcm, 24000);
+        const wavBase64 = wavBuf.toString("base64");
+        const transcriptText = await safeTranscribeAudio(
+          ai,
+          wavBase64,
+          "Transcribe this spoken audio verbatim in clear English. Output ONLY the spoken transcript text with no extra commentary or quotes."
+        );
+        if (transcriptText && clientWs.readyState === clientWs.OPEN) {
+          clientWs.send(JSON.stringify({ text: transcriptText }));
+        }
+      } catch (err) {
+        console.error("AI audio transcription error:", err);
+      }
+    };
+
+    const handleAiAudioChunk = (base64Data: string) => {
+      aiPcmChunks.push(Buffer.from(base64Data, 'base64'));
+      if (aiTranscriptionTimer) clearTimeout(aiTranscriptionTimer);
+      aiTranscriptionTimer = setTimeout(flushAiTranscription, 800);
+    };
+    
+    try {
+      let session: any;
+      try {
+        session = await ai.live.connect({
+          model: "gemini-3.1-flash-live-preview",
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+            },
+            systemInstruction: "You are CareLens, an empathetic and highly observant Occupational Therapist. The user is walking around their home showing you the environment through their camera. Guide them gently, ask them to pan or look closer if needed, and point out potential safety hazards for elderly individuals (e.g., loose rugs, raised thresholds, poor lighting, lack of grab bars). Keep your responses concise (1-2 sentences) and supportive.",
+          },
+          callbacks: {
+            onmessage: (message: LiveServerMessage) => {
+              const parts = message.serverContent?.modelTurn?.parts;
+              if (parts) {
+                for (const p of parts) {
+                  if (p.inlineData?.data) {
+                    clientWs.send(JSON.stringify({ audio: p.inlineData.data }));
+                    handleAiAudioChunk(p.inlineData.data);
+                  }
+                  if (p.text) {
+                    clientWs.send(JSON.stringify({ text: p.text }));
+                  }
+                }
+              }
+
+              if (message.serverContent?.turnComplete) {
+                if (aiTranscriptionTimer) clearTimeout(aiTranscriptionTimer);
+                flushAiTranscription();
+              }
+
+              if (message.serverContent?.interrupted) {
+                if (aiTranscriptionTimer) clearTimeout(aiTranscriptionTimer);
+                aiPcmChunks = [];
+                clientWs.send(JSON.stringify({ interrupted: true }));
+              }
+            },
+            onclose: (e: any) => {
+              console.log("Gemini Live API session closed:", e?.code, e?.reason);
+              if (clientWs.readyState === clientWs.OPEN) {
+                clientWs.close(1000, e?.reason || "Live session finished");
+              }
+            },
+            onerror: (err: any) => {
+              console.error("Live API Error:", err);
+            }
+          },
+        });
+      } catch (primaryErr) {
+        console.warn("Primary live model failed, trying fallback gemini-2.5-flash-native-audio-latest...", primaryErr);
+        session = await ai.live.connect({
+          model: "gemini-2.5-flash-native-audio-latest",
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+            },
+            systemInstruction: "You are CareLens, an empathetic and highly observant Occupational Therapist. The user is walking around their home showing you the environment through their camera. Guide them gently, ask them to pan or look closer if needed, and point out potential safety hazards for elderly individuals (e.g., loose rugs, raised thresholds, poor lighting, lack of grab bars). Keep your responses concise (1-2 sentences) and supportive.",
+          },
+          callbacks: {
+            onmessage: (message: LiveServerMessage) => {
+              const parts = message.serverContent?.modelTurn?.parts;
+              if (parts) {
+                for (const p of parts) {
+                  if (p.inlineData?.data) {
+                    clientWs.send(JSON.stringify({ audio: p.inlineData.data }));
+                    handleAiAudioChunk(p.inlineData.data);
+                  }
+                  if (p.text) {
+                    clientWs.send(JSON.stringify({ text: p.text }));
+                  }
+                }
+              }
+
+              if (message.serverContent?.turnComplete) {
+                if (aiTranscriptionTimer) clearTimeout(aiTranscriptionTimer);
+                flushAiTranscription();
+              }
+
+              if (message.serverContent?.interrupted) {
+                if (aiTranscriptionTimer) clearTimeout(aiTranscriptionTimer);
+                aiPcmChunks = [];
+                clientWs.send(JSON.stringify({ interrupted: true }));
+              }
+            },
+            onclose: (e: any) => {
+              console.log("Gemini Live API fallback session closed:", e?.code, e?.reason);
+              if (clientWs.readyState === clientWs.OPEN) {
+                clientWs.close(1000, e?.reason || "Live session finished");
+              }
+            },
+            onerror: (err: any) => {
+              console.error("Live API Fallback Error:", err);
+            }
+          },
+        });
+      }
+
+      clientWs.on("message", (data) => {
+        try {
+          const parsed = JSON.parse(data.toString());
+          if (parsed.audio) {
+            session.sendRealtimeInput({
+              audio: { data: parsed.audio, mimeType: "audio/pcm;rate=16000" },
+            });
+
+            // Accumulate user microphone audio for transcript log
+            userPcmChunks.push(Buffer.from(parsed.audio, 'base64'));
+            if (userTranscriptionTimer) clearTimeout(userTranscriptionTimer);
+            userTranscriptionTimer = setTimeout(async () => {
+              if (userPcmChunks.length === 0) return;
+              const combinedUserPcm = Buffer.concat(userPcmChunks);
+              userPcmChunks = [];
+              if (combinedUserPcm.length < 16000 * 2 * 0.25) return;
+              try {
+                const wavBuf = pcmToWavBuffer(combinedUserPcm, 16000);
+                const wavBase64 = wavBuf.toString("base64");
+                const userTranscriptText = await safeTranscribeAudio(
+                  ai,
+                  wavBase64,
+                  "Transcribe this user speech verbatim in English. Output ONLY the exact transcript text with no extra commentary or quotes."
+                );
+                if (userTranscriptText && clientWs.readyState === clientWs.OPEN) {
+                  clientWs.send(JSON.stringify({ text: userTranscriptText, isUser: true }));
+                }
+              } catch (e) {
+                console.error("User audio transcription error:", e);
+              }
+            }, 800);
+          }
+
+          if (parsed.text) {
+            // Send echo back to client for transcript/UI acknowledgement
+            clientWs.send(JSON.stringify({ text: parsed.text, isUser: true }));
+            
+            try {
+              session.sendRealtimeInput({ text: parsed.text });
+            } catch (err) {
+              console.warn("sendRealtimeInput text failed, using sendClientContent fallback", err);
+              session.sendClientContent({ turns: [{ role: "user", parts: [{ text: parsed.text }] }], turnComplete: true });
+            }
+          }
+          if (parsed.video) {
+            session.sendRealtimeInput({
+              video: { data: parsed.video, mimeType: "image/jpeg" }
+            });
+          }
+        } catch (err) {
+          console.error("Error parsing message from client", err);
+        }
+      });
+      
+      clientWs.on("close", () => {
+        // cleanup session if needed
+        try {
+          session.close();
+        } catch(e) {}
+      });
+      
+    } catch (err) {
+      console.error("Failed to start Live API session", err);
+      clientWs.close(1011, "Failed to start Live API");
+    }
   });
 }
 

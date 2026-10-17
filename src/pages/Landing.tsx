@@ -1,210 +1,373 @@
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, ShieldCheck, Camera, Activity, Briefcase, Play } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { motion, useScroll, useTransform } from "motion/react";
+import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
+import { LensMark } from "@/components/brand/LensMark";
 
-export function Landing() {
+// Curated, real architectural / interior photography — this is the product's
+// emotional register, not decoration. Every section that needs a home shows
+// an actual home.
+const IMG = {
+  exteriorDusk: "https://images.unsplash.com/photo-1757359056339-22968344cce6?q=80&w=2400&auto=format&fit=crop",
+  livingRoom: "https://images.unsplash.com/photo-1759238136854-a43787126db7?q=80&w=2400&auto=format&fit=crop",
+  staircase: "https://images.unsplash.com/photo-1759782526827-5fecfb5f2d9c?q=80&w=2400&auto=format&fit=crop",
+  kitchen: "https://images.unsplash.com/photo-1764526624453-db32c24eca55?q=80&w=2400&auto=format&fit=crop",
+};
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+function FadeUp({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-10% 0px" }}
+      transition={{ duration: 0.9, delay, ease: EASE }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Minimal, mostly-invisible nav — present only when needed, never competing with the photography. */
+function SiteHeader() {
   const { user } = useAuthStore();
   const { scrollY } = useScroll();
-  const y1 = useTransform(scrollY, [0, 500], [0, 100]);
+  const [solid, setSolid] = useState(false);
+  useMotionValueEvent(scrollY, "change", (v) => setSolid(v > 40));
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans selection:bg-primary/20">
-      <header className="px-6 py-4 flex items-center justify-between sticky top-0 z-50 bg-background/60 backdrop-blur-3xl border-b border-black/5 dark:border-white/5">
-        <div className="flex items-center gap-2">
-          <div className="bg-foreground p-1.5 rounded-xl shadow-inner">
-            <ShieldCheck className="h-5 w-5 text-background" />
-          </div>
-          <span className="text-lg font-medium tracking-tight">CareLens</span>
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-500 ${
+        solid ? "bg-background/90 backdrop-blur-md border-b border-border" : "bg-transparent border-b border-transparent"
+      }`}
+    >
+      <div className="max-w-[1600px] mx-auto px-6 md:px-10 h-20 flex items-center justify-between">
+        <div className={`flex items-center gap-2.5 transition-colors duration-500 ${solid ? "text-foreground" : "text-white"}`}>
+          <LensMark className="w-5 h-5 text-brand" />
+          <span className="text-sm font-semibold tracking-tight">CARELENS</span>
         </div>
-        <nav className="hidden md:flex items-center gap-10">
-          <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Platform</a>
-          <a href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">How it works</a>
-          <a href="#about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Company</a>
-        </nav>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           {!user ? (
             <>
-              <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:block">Sign in</Link>
-              <Button className="rounded-full px-6 bg-foreground text-background hover:bg-foreground/90 transition-all shadow-sm" asChild>
+              <Link
+                to="/login"
+                className={`text-sm font-medium hidden sm:block transition-colors duration-500 ${
+                  solid ? "text-muted-foreground hover:text-foreground" : "text-white/70 hover:text-white"
+                }`}
+              >
+                Sign in
+              </Link>
+              <Button variant="brand" size="sm" asChild>
                 <Link to="/login">Get Started</Link>
               </Button>
             </>
           ) : (
-            <Button className="rounded-full px-6 bg-foreground text-background hover:bg-foreground/90 transition-all shadow-sm" asChild>
+            <Button variant="brand" size="sm" asChild>
               <Link to="/dashboard">Dashboard</Link>
             </Button>
           )}
         </div>
-      </header>
+      </div>
+    </header>
+  );
+}
 
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section className="relative pt-32 pb-32 md:pt-48 md:pb-40 px-6 flex flex-col items-center text-center overflow-hidden">
-          {/* Subtle Glow Background */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-[1000px] h-[500px] bg-primary/5 blur-[120px] rounded-full pointer-events-none -z-10" />
-          
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="inline-flex items-center rounded-full border border-black/5 dark:border-white/5 bg-muted/50 backdrop-blur-md px-4 py-1.5 text-sm font-medium mb-8 text-muted-foreground"
-          >
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 mr-3 animate-pulse"></span>
-            Introducing CareLens 2.0
-          </motion.div>
-          
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl md:text-8xl font-medium tracking-tighter max-w-5xl leading-[1.05] mb-8 text-foreground"
-          >
-            Safety, seen clearly.
-          </motion.h1>
-          
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="text-lg md:text-2xl text-muted-foreground max-w-3xl mb-12 leading-relaxed font-light tracking-wide"
-          >
-            CareLens transforms your smartphone into a clinical-grade environmental scanner. Instantly detect hazards and generate professional safety reports.
-          </motion.p>
-          
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
-          >
-            <Button size="lg" className="w-full sm:w-auto h-14 px-8 text-base rounded-full bg-foreground text-background hover:scale-105 active:scale-95 transition-all shadow-xl" asChild>
-              <Link to={user ? "/scan" : "/login"}>
-                Analyze a Room <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button size="lg" variant="ghost" className="w-full sm:w-auto h-14 px-8 text-base rounded-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground">
-              <Play className="mr-2 h-4 w-4" /> Watch Demo
-            </Button>
-          </motion.div>
-        </section>
+/** Section 1 — Hero. Full viewport, architectural photography, gentle parallax. */
+function Hero() {
+  const { user } = useAuthStore();
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const imgY = useTransform(scrollYProgress, [0, 1], ["0%", "18%"]);
+  const textY = useTransform(scrollYProgress, [0, 1], ["0%", "40%"]);
+  const fade = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
 
-        {/* Value Prop Mockup Section */}
-        <section className="px-6 py-12 flex justify-center -mt-16 mb-32 relative z-10">
-          <motion.div 
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            style={{ y: y1 }}
-            className="max-w-6xl w-full rounded-[2.5rem] p-3 shadow-[0_20px_60px_rgba(0,0,0,0.08)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.3)] bg-white/40 dark:bg-neutral-900/40 backdrop-blur-3xl border border-black/5 dark:border-white/10"
-          >
-            <div className="rounded-[2rem] overflow-hidden border border-black/5 dark:border-white/5 bg-card flex flex-col md:flex-row h-full min-h-[500px]">
-               <div className="flex-1 p-10 md:p-16 flex flex-col justify-center">
-                 <div className="h-12 w-12 rounded-2xl bg-muted flex items-center justify-center mb-8 border border-black/5 dark:border-white/5 shadow-sm">
-                   <Activity className="h-5 w-5 text-foreground" />
-                 </div>
-                 <h3 className="text-3xl md:text-4xl font-medium tracking-tight mb-6">Precision detection.</h3>
-                 <p className="text-muted-foreground text-lg mb-10 leading-relaxed font-light">
-                   Our proprietary vision models detect subtle trip hazards, evaluate lighting conditions, and assess structural requirements with clinical accuracy.
-                 </p>
-                 <ul className="space-y-5">
-                   {['Instant analysis of living spaces', 'Automated safety scoring', 'Actionable modification plans'].map((feature, i) => (
-                     <li key={i} className="flex items-center text-base font-medium text-foreground/80">
-                       <ShieldCheck className="h-5 w-5 text-emerald-500 mr-4 shrink-0" /> {feature}
-                     </li>
-                   ))}
-                 </ul>
-               </div>
-               <div className="flex-1 bg-muted/20 border-l border-black/5 dark:border-white/5 relative flex items-center justify-center p-8">
-                  {/* Elegant Abstract UI Representation */}
-                  <div className="w-full max-w-sm space-y-6">
-                    <motion.div 
-                      initial={{ opacity: 0, x: 20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
+  return (
+    <section ref={ref} className="relative h-[100svh] min-h-[640px] overflow-hidden bg-neutral-950">
+      <motion.div style={{ y: imgY }} className="absolute inset-0 h-[120%]">
+        <img src={IMG.exteriorDusk} alt="A quiet modern home at dusk" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-black/35" />
+      </motion.div>
+
+      <motion.div style={{ y: textY, opacity: fade }} className="relative z-10 h-full flex flex-col justify-end px-6 md:px-10 pb-20 md:pb-28 max-w-[1600px] mx-auto w-full">
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.3, ease: EASE }}
+          className="field-tag text-white/55 mb-6"
+        >
+          CareLens
+        </motion.p>
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1.1, delay: 0.45, ease: EASE }}
+          className="narrative text-white text-[3.4rem] leading-[1.02] sm:text-7xl md:text-[6rem] max-w-4xl text-balance"
+        >
+          Know your home is <span className="text-brand">safe</span>.
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.65, ease: EASE }}
+          className="text-white/65 text-lg md:text-xl max-w-md mt-6 leading-relaxed"
+        >
+          A single photo, a clear answer — and a little more peace of mind about the people you love.
+        </motion.p>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.85, ease: EASE }}
+          className="flex flex-wrap gap-3 mt-10"
+        >
+          <Button variant="brand" size="lg" asChild>
+            <Link to={user ? "/scan" : "/login"}>Try it on a room <ArrowRight className="w-4 h-4 ml-1" /></Link>
+          </Button>
+          <Button variant="outline" size="lg" className="bg-white/5 hover:bg-white/10 text-white border-white/20 backdrop-blur-md">
+            Watch how it works
+          </Button>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.4, duration: 1 }}
+        style={{ opacity: fade }}
+        className="absolute bottom-6 right-6 md:right-10 z-10 hidden sm:flex flex-col items-end gap-2 text-white/40"
+      >
+        <span className="field-tag">Scroll</span>
+        <motion.span
+          animate={{ y: [0, 6, 0] }}
+          transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+          className="w-px h-8 bg-white/40"
+        />
+      </motion.div>
+    </section>
+  );
+}
+
+/** Section 2 — Transition. A photo becomes understanding: three states cross-fade
+ *  as the reader scrolls through a single pinned frame — Photo → AI reading the
+ *  room → the plain-language read. No dashboard chrome, no gauges. */
+function Understanding() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+
+  const photoOpacity = useTransform(scrollYProgress, [0, 0.28, 0.42], [1, 1, 0]);
+  const scanOpacity = useTransform(scrollYProgress, [0.28, 0.42, 0.62, 0.78], [0, 1, 1, 0]);
+  const scanLineY = useTransform(scrollYProgress, [0.3, 0.62], ["0%", "100%"]);
+  const readOpacity = useTransform(scrollYProgress, [0.68, 0.82], [0, 1]);
+  const readY = useTransform(scrollYProgress, [0.68, 0.86], [24, 0]);
+  const imgScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
+
+  return (
+    <section ref={ref} className="relative h-[280vh] bg-neutral-950">
+      <div className="sticky top-0 h-[100svh] overflow-hidden">
+        <motion.img
+          style={{ scale: imgScale }}
+          src={IMG.livingRoom}
+          alt="A living room, as photographed for assessment"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <motion.div style={{ opacity: photoOpacity }} className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/10" />
+
+        {/* Reading pass — a single quiet line sweeping the frame, not a sci-fi grid */}
+        <motion.div style={{ opacity: scanOpacity }} className="absolute inset-0 bg-black/45">
+          <motion.div style={{ top: scanLineY }} className="absolute left-0 right-0 h-px bg-brand shadow-[0_0_24px_4px_var(--brand)]" />
+          <div className="absolute bottom-14 left-6 md:left-10">
+            <span className="field-tag text-white/60">Reading the room</span>
+          </div>
+        </motion.div>
+
+        {/* The plain-language read */}
+        <motion.div style={{ opacity: readOpacity, y: readY }} className="absolute inset-0 flex items-end">
+          <div className="px-6 md:px-10 pb-20 md:pb-28 max-w-[1600px] mx-auto w-full">
+            <span className="field-tag text-white/55 block mb-5">What CareLens sees</span>
+            <p className="narrative text-white text-4xl md:text-6xl max-w-3xl text-balance leading-[1.08]">
+              "Good light, clear paths — but that rug by the sofa is worth a second look."
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+/** Section 3 — The experience, told as a sequence, not a feature grid.
+ *  Alternating editorial rows: a number, a short beat of narration, a photograph. */
+function Experience() {
+  const steps = [
+    { n: "01", title: "Take a photo", copy: "However you'd normally see the room — no special angle, no equipment. Just what's there.", img: IMG.livingRoom },
+    { n: "02", title: "CareLens looks closely", copy: "The same things a careful visitor would notice: footing, lighting, what's within reach.", img: IMG.staircase },
+    { n: "03", title: "You get a plain-language read", copy: "Not a spreadsheet of scores — a short, honest sense of how the room is doing.", img: IMG.kitchen },
+    { n: "04", title: "One next step, not twenty", copy: "The single change most worth making, with real people nearby who can help if you want it.", img: IMG.livingRoom },
+  ];
+
+  return (
+    <section className="py-28 md:py-40 px-6 md:px-10">
+      <div className="max-w-[1600px] mx-auto">
+        <FadeUp className="max-w-2xl mb-20 md:mb-28">
+          <span className="field-tag text-muted-foreground block mb-5">How it works</span>
+          <h2 className="narrative text-4xl md:text-6xl text-balance">Less like software. More like a second pair of eyes.</h2>
+        </FadeUp>
+
+        <div>
+          {steps.map((s, i) => (
+            <FadeUp key={s.n} delay={i * 0.05}>
+              <div className={`grid md:grid-cols-12 gap-8 md:gap-16 items-center py-14 md:py-20 border-t border-border ${i === steps.length - 1 ? "border-b" : ""}`}>
+                <div className={`md:col-span-5 ${i % 2 === 1 ? "md:order-2" : ""}`}>
+                  <span className="tabular text-brand text-sm block mb-5">{s.n}</span>
+                  <h3 className="text-3xl md:text-4xl font-semibold tracking-tight mb-4">{s.title}</h3>
+                  <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">{s.copy}</p>
+                </div>
+                <div className={`md:col-span-7 ${i % 2 === 1 ? "md:order-1" : ""}`}>
+                  <div className="aspect-[16/10] overflow-hidden photo-vignette">
+                    <motion.img
+                      initial={{ scale: 1.08 }}
+                      whileInView={{ scale: 1 }}
                       viewport={{ once: true }}
-                      transition={{ duration: 0.8, delay: 0.2 }}
-                      className="bg-card rounded-[2rem] p-6 shadow-2xl border border-black/5 dark:border-white/5 space-y-4"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-red-400" />
-                          <div className="h-4 w-24 bg-muted rounded-full" />
-                        </div>
-                        <div className="h-8 w-16 bg-red-50 dark:bg-red-500/10 rounded-full" />
-                      </div>
-                      <div className="h-24 w-full bg-muted/50 rounded-2xl" />
-                    </motion.div>
-                    <motion.div 
-                      initial={{ opacity: 0, x: 20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.8, delay: 0.4 }}
-                      className="bg-card rounded-[2rem] p-6 shadow-2xl border border-black/5 dark:border-white/5 space-y-4 ml-8"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-amber-400" />
-                          <div className="h-4 w-32 bg-muted rounded-full" />
-                        </div>
-                        <div className="h-8 w-16 bg-amber-50 dark:bg-amber-500/10 rounded-full" />
-                      </div>
-                      <div className="h-24 w-full bg-muted/50 rounded-2xl" />
-                    </motion.div>
+                      transition={{ duration: 1.4, ease: EASE }}
+                      src={s.img}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-               </div>
-            </div>
-          </motion.div>
-        </section>
-
-        {/* Features Section */}
-        <section className="py-32 bg-background" id="features">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-24">
-              <h2 className="text-4xl md:text-5xl font-medium tracking-tight mb-6">Professional assessments.</h2>
-              <p className="text-muted-foreground text-xl max-w-2xl mx-auto font-light leading-relaxed">Advanced computer vision identifies hazards and recommends solutions that even experts might miss.</p>
-            </div>
-            
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="group bg-card p-10 rounded-[2.5rem] border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] hover:-translate-y-1">
-                <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center mb-8 border border-black/5 dark:border-white/5 group-hover:bg-foreground group-hover:text-background transition-colors">
-                  <Camera className="h-6 w-6" />
                 </div>
-                <h3 className="text-2xl font-medium mb-4 tracking-tight">Intelligent Scanning</h3>
-                <p className="text-muted-foreground leading-relaxed text-base font-light">Simply upload photos of your living spaces. Our AI instantly detects trip hazards, poor lighting, and accessibility barriers in real-time.</p>
               </div>
-              
-              <div className="group bg-card p-10 rounded-[2.5rem] border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] hover:-translate-y-1">
-                <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center mb-8 border border-black/5 dark:border-white/5 group-hover:bg-foreground group-hover:text-background transition-colors">
-                  <Activity className="h-6 w-6" />
-                </div>
-                <h3 className="text-2xl font-medium mb-4 tracking-tight">Safety Index</h3>
-                <p className="text-muted-foreground leading-relaxed text-base font-light">Get a quantifiable measure of your home's safety. Track improvements over time as you resolve identified risks and build a safer environment.</p>
-              </div>
-              
-              <div className="group bg-card p-10 rounded-[2.5rem] border border-black/5 dark:border-white/5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] transition-all hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] hover:-translate-y-1">
-                <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center mb-8 border border-black/5 dark:border-white/5 group-hover:bg-foreground group-hover:text-background transition-colors">
-                  <Briefcase className="h-6 w-6" />
-                </div>
-                <h3 className="text-2xl font-medium mb-4 tracking-tight">Professional Network</h3>
-                <p className="text-muted-foreground leading-relaxed text-base font-light">Connect with local programs, grants, and certified professionals who can help implement the recommended home modifications seamlessly.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-      
-      <footer className="py-16 border-t border-black/5 dark:border-white/5 bg-card">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between">
-          <div className="flex items-center gap-3 mb-6 md:mb-0">
-            <div className="bg-foreground p-1.5 rounded-lg shadow-inner">
-              <ShieldCheck className="h-4 w-4 text-background" />
-            </div>
-            <span className="font-medium tracking-tight text-lg">CareLens</span>
-          </div>
-          <p className="text-sm text-muted-foreground font-light">© {new Date().getFullYear()} CareLens AI. All rights reserved.</p>
+            </FadeUp>
+          ))}
         </div>
-      </footer>
+      </div>
+    </section>
+  );
+}
+
+/** Section 4 — Before / After, told as a comparison of two sentences and one
+ *  photograph, not a slider gimmick or a stat card. */
+function BeforeAfter() {
+  return (
+    <section className="relative py-28 md:py-40 overflow-hidden">
+      <div className="absolute inset-0">
+        <img src={IMG.staircase} alt="A staircase" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-black/55" />
+      </div>
+
+      <div className="relative z-10 max-w-[1600px] mx-auto px-6 md:px-10">
+        <FadeUp className="max-w-xl mb-16 md:mb-20">
+          <span className="field-tag text-white/50 block mb-5">One change, noticed</span>
+          <h2 className="narrative text-white text-4xl md:text-6xl text-balance">Small fixes carry more weight than they look like they should.</h2>
+        </FadeUp>
+
+        <div className="grid md:grid-cols-2 gap-10 md:gap-20 max-w-4xl">
+          <FadeUp delay={0.1}>
+            <span className="field-tag text-white/40 block mb-4">Before</span>
+            <p className="narrative text-white/70 text-2xl md:text-3xl leading-snug text-balance">
+              "The staircase has uneven lighting and no handrail on one side."
+            </p>
+          </FadeUp>
+          <FadeUp delay={0.2}>
+            <span className="field-tag text-brand block mb-4">After one recommendation</span>
+            <p className="narrative text-white text-2xl md:text-3xl leading-snug text-balance">
+              "A single motion light and handrail turned a risk into a non-issue."
+            </p>
+          </FadeUp>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Section 5 — Trust. Philosophy, not testimonials. */
+function Philosophy() {
+  return (
+    <section className="py-28 md:py-40 px-6 md:px-10">
+      <div className="max-w-[1600px] mx-auto">
+        <div className="grid md:grid-cols-12 gap-10 items-start">
+          <FadeUp className="md:col-span-4">
+            <span className="field-tag text-muted-foreground block">What we believe</span>
+          </FadeUp>
+          <FadeUp delay={0.1} className="md:col-span-8">
+            <p className="narrative text-4xl md:text-6xl leading-[1.15] text-balance">
+              We don't replace inspectors. We help families notice what they might otherwise miss.
+            </p>
+            <p className="text-muted-foreground text-lg leading-relaxed mt-10 max-w-xl">
+              CareLens isn't trying to be clinical. It's trying to be the friend who visits, glances around, and gently says — "hey, you might want to look at that step."
+            </p>
+          </FadeUp>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Section 6 — Final CTA. Editorial, minimal, one photograph, one line. */
+function FinalCTA() {
+  const { user } = useAuthStore();
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const imgScale = useTransform(scrollYProgress, [0, 1], [1.1, 1]);
+
+  return (
+    <section ref={ref} className="relative h-[80vh] min-h-[560px] overflow-hidden bg-neutral-950">
+      <motion.div style={{ scale: imgScale }} className="absolute inset-0">
+        <img src={IMG.kitchen} alt="A quiet, well-lit kitchen" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-black/60" />
+      </motion.div>
+
+      <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6">
+        <FadeUp>
+          <h2 className="narrative text-white text-5xl md:text-8xl leading-[1.02] text-balance max-w-4xl">
+            Start with one photo.
+          </h2>
+        </FadeUp>
+        <FadeUp delay={0.15}>
+          <Button variant="brand" size="lg" className="mt-10" asChild>
+            <Link to={user ? "/scan" : "/login"}>Try CareLens <ArrowRight className="w-4 h-4 ml-1" /></Link>
+          </Button>
+        </FadeUp>
+      </div>
+    </section>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="border-t border-border">
+      <div className="max-w-[1600px] mx-auto px-6 md:px-10 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <LensMark className="w-4 h-4 text-brand" />
+          <span className="text-sm font-semibold tracking-tight">CARELENS</span>
+        </div>
+        <nav className="flex items-center gap-6">
+          <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy</a>
+          <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Terms</a>
+          <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+            Contact <ArrowUpRight className="w-3 h-3" />
+          </a>
+        </nav>
+        <p className="tabular text-xs text-muted-foreground">© {new Date().getFullYear()} CareLens</p>
+      </div>
+    </footer>
+  );
+}
+
+export function Landing() {
+  return (
+    <div className="min-h-screen bg-background flex flex-col font-sans selection:bg-brand/20">
+      <SiteHeader />
+      <main className="flex-1">
+        <Hero />
+        <Understanding />
+        <Experience />
+        <BeforeAfter />
+        <Philosophy />
+        <FinalCTA />
+      </main>
+      <SiteFooter />
     </div>
   );
 }

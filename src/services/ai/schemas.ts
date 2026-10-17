@@ -13,7 +13,7 @@ export interface SafetyAnalysis {
   detectedObjects: {
     name: string;
     confidence: number;
-    boundingBox?: {
+    boundingBox: {
       x: number;
       y: number;
       width: number;
@@ -29,7 +29,7 @@ export interface SafetyAnalysis {
     confidence: number;
     objectsInvolved: string[];
     reasoning: string;
-    boundingBox?: {
+    boundingBox: {
       x: number;
       y: number;
       width: number;

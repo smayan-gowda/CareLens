@@ -49,6 +49,7 @@ export interface Recommendation {
   certainty?: number;
   falsePositivePossible?: boolean;
   relatedHazardIds?: string[];
+  completedAt?: string;
 }
 
 export type ScanStatus = 'Pending' | 'Analyzing' | 'Completed' | 'Failed';
@@ -78,6 +79,7 @@ export interface ScanResult {
   createdAt: string;
   completedAt?: string;
   safetyScore: number;
+  initialSafetyScore?: number;
   subScores?: SubScores;
   roomType?: string;
   roomConfidence?: number;

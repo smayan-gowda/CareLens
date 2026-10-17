@@ -1,101 +1,154 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { Home, ShieldCheck, Activity, Users, Plus, Map, UserCircle } from "lucide-react";
+import { UserCircle, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LensMark } from "@/components/brand/LensMark";
+import { NotificationCenter } from "@/components/layout/NotificationCenter";
+import { useHomeStore } from "@/stores/useHomeStore";
 
 const navItems = [
-  { id: "overview", label: "Overview", icon: Home, path: "/overview" },
-  { id: "properties", label: "Properties", icon: ShieldCheck, path: "/properties" },
-  { id: "scan", label: "Scan", icon: Plus, path: "/scan", primary: true },
-  { id: "assessments", label: "Assessments", icon: Activity, path: "/assessments" },
-  { id: "marketplace", label: "Marketplace", icon: Map, path: "/marketplace" },
-  { id: "network", label: "Network", icon: Users, path: "/network" },
+ { id: "01", label: "Overview", path: "/overview" },
+ { id: "02", label: "Properties", path: "/properties" },
+ { id: "03", label: "Assessments", path: "/assessments" },
+ { id: "04", label: "Marketplace", path: "/marketplace" },
+ { id: "05", label: "Network", path: "/network" },
 ];
 
-function FloatingDock() {
-  const location = useLocation();
-  const navigate = useNavigate();
+/**
+ * The Ledger Bar — CareLens's signature navigation. Modeled on a surveyor's
+ * measuring strip / gauge readout: numbered tick-stations across a fixed
+ * top bar with a running hairline, not icons in a dock and not a sidebar.
+ * The one warm touch: a live thumbnail of the person's home sits beside the
+ * mark, so even the chrome reminds them this is their house, not a tool.
+ */
+function LedgerBar() {
+ const location = useLocation();
+ const navigate = useNavigate();
+ const { homes } = useHomeStore();
+ const primaryHome = homes[0];
 
-  return (
-    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-      <motion.div 
-        initial={{ y: 60, opacity: 0, scale: 0.95 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        className="flex items-center gap-1 p-1.5 bg-white/70 dark:bg-neutral-900/70 backdrop-blur-3xl border border-white/40 dark:border-white/10 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.4)]"
-      >
-        {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.path) && item.path !== "/";
-          return (
-            <button
-              key={item.id}
-              onClick={() => navigate(item.path)}
-              className={cn(
-                "relative group flex items-center justify-center p-3 rounded-full transition-all duration-300",
-                item.primary 
-                  ? "bg-foreground text-background hover:scale-105 shadow-md mx-1" 
-                  : "hover:bg-black/5 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <item.icon className={cn("w-5 h-5", isActive && !item.primary && "text-foreground")} strokeWidth={isActive ? 2.5 : 2} />
-              
-              <div className="absolute -top-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-3 py-1.5 bg-foreground text-background text-xs font-medium rounded-lg pointer-events-none whitespace-nowrap shadow-xl">
-                {item.label}
-              </div>
+ return (
+ <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border">
+ <div className="max-w-[1400px] mx-auto px-4 md:px-8">
+ <div className="h-16 flex items-center justify-between gap-4">
+ <button onClick={() => navigate("/overview")} className="flex items-center gap-3 shrink-0" aria-label="CareLens home">
+ <LensMark className="w-5 h-5 text-brand" />
+ <span className="hidden sm:block text-sm font-semibold tracking-tight">CARELENS</span>
+ {primaryHome && (
+ <span className="hidden md:flex items-center gap-2 pl-3 ml-1 border-l border-border">
+ <span className="w-6 h-6 overflow-hidden bg-muted shrink-0">
+ {primaryHome.coverImage ? (
+ <img src={primaryHome.coverImage} className="w-full h-full object-cover" alt="" />
+ ) : null}
+ </span>
+ <span className="text-[13px] text-muted-foreground truncate max-w-[140px]">{primaryHome.name}</span>
+ </span>
+ )}
+ </button>
 
-              {isActive && !item.primary && (
-                <motion.div 
-                  layoutId="activeTab"
-                  className="absolute inset-0 bg-black/5 dark:bg-white/10 rounded-full"
-                  transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </motion.div>
-    </div>
-  );
+ <nav aria-label="Primary" className="hidden md:flex items-stretch h-16 flex-1 justify-center">
+ {navItems.map((item) => {
+ const isActive = location.pathname.startsWith(item.path);
+ return (
+ <button
+ key={item.id}
+ onClick={() => navigate(item.path)}
+ className="relative flex items-center gap-2 px-5 h-full group"
+ >
+ <span className={cn("tabular text-[11px] transition-colors", isActive ? "text-brand" : "text-muted-foreground/40 group-hover:text-muted-foreground")}>
+ {item.id}
+ </span>
+ <span className={cn("text-[13px] font-medium tracking-tight transition-colors", isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")}>
+ {item.label}
+ </span>
+ {isActive && (
+ <motion.span
+ layoutId="ledger-tick"
+ className="absolute bottom-0 left-3 right-3 h-[2px] bg-brand"
+ transition={{ type: "spring", stiffness: 500, damping: 40 }}
+ />
+ )}
+ </button>
+ );
+ })}
+ </nav>
+
+ <div className="flex items-center gap-2 shrink-0">
+ <button
+ onClick={() => navigate("/scan")}
+ className="hidden sm:flex items-center gap-1.5 h-9 pl-3 pr-3.5 rounded-md bg-brand text-brand-foreground text-[13px] font-medium hover:brightness-105 transition-[filter,transform] active:scale-[0.97]"
+ >
+ <Plus className="w-3.5 h-3.5" strokeWidth={2.25} /> Scan
+ </button>
+ <NotificationCenter />
+ <button
+ onClick={() => navigate("/profile")}
+ aria-label="Profile"
+ className="w-9 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+ >
+ <UserCircle className="w-[18px] h-[18px]" strokeWidth={1.6} />
+ </button>
+ </div>
+ </div>
+ </div>
+ </header>
+ );
+}
+
+/** Mobile station strip — same numbering system, condensed to icon-free text. */
+function MobileBar() {
+ const location = useLocation();
+ const navigate = useNavigate();
+ return (
+ <nav
+ aria-label="Primary"
+ className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t border-border bg-background/95 backdrop-blur-md overflow-x-auto"
+ >
+ {navItems.map((item) => {
+ const isActive = location.pathname.startsWith(item.path);
+ return (
+ <button
+ key={item.id}
+ onClick={() => navigate(item.path)}
+ className="flex-1 min-w-[72px] flex flex-col items-center justify-center gap-1 py-2.5 relative"
+ >
+ <span className={cn("tabular text-[10px]", isActive ? "text-brand" : "text-muted-foreground/40")}>{item.id}</span>
+ <span className={cn("text-[10px] font-medium tracking-tight", isActive ? "text-foreground" : "text-muted-foreground")}>{item.label}</span>
+ {isActive && <span className="absolute top-0 left-3 right-3 h-[2px] bg-brand" />}
+ </button>
+ );
+ })}
+ </nav>
+ );
 }
 
 export function AppLayout() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden font-sans selection:bg-primary/20">
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        <header className="absolute top-0 left-0 right-0 p-8 flex justify-between items-center z-40 pointer-events-none w-full">
-           <div className="text-xl font-semibold tracking-tight pointer-events-auto flex items-center gap-2.5 px-4 py-2 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-xl border border-white/40 dark:border-white/10 rounded-2xl shadow-sm">
-             <div className="w-8 h-8 bg-foreground rounded-xl flex items-center justify-center text-background shadow-inner">
-                <ShieldCheck className="w-4 h-4" />
-             </div>
-             CareLens
-           </div>
-           <button 
-             onClick={() => navigate('/profile')}
-             className="w-12 h-12 rounded-2xl bg-white/50 dark:bg-neutral-900/50 backdrop-blur-xl border border-white/40 dark:border-white/10 flex items-center justify-center pointer-events-auto transition-transform hover:scale-105 shadow-sm text-foreground"
-           >
-              <UserCircle className="w-5 h-5" strokeWidth={2} />
-           </button>
-        </header>
+ const location = useLocation();
+ return (
+ <div className="min-h-screen bg-background text-foreground font-sans selection:bg-brand/20">
+ <LedgerBar />
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden h-full w-full relative z-10 pt-32 pb-40 px-4 md:px-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="h-full max-w-5xl mx-auto"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
-        </main>
+ <main className="pt-16 pb-20 md:pb-0 min-h-screen">
+ <AnimatePresence mode="wait">
+ <motion.div
+ key={location.pathname}
+ initial={{ opacity: 0, y: 8 }}
+ animate={{ opacity: 1, y: 0 }}
+ exit={{ opacity: 0, y: -8 }}
+ transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+ className={cn(
+ "min-h-full",
+ location.pathname.startsWith("/overview")
+ ? ""
+ : "max-w-[1400px] mx-auto px-4 md:px-8 pt-10 md:pt-14 pb-20"
+ )}
+ >
+ <Outlet />
+ </motion.div>
+ </AnimatePresence>
+ </main>
 
-        <FloatingDock />
-      </div>
-    </div>
-  );
+ <MobileBar />
+ </div>
+ );
 }
