@@ -88,6 +88,25 @@
         "timestamp": { "type": "string", "description": "ISO timestamp" }
       },
       "required": ["userId", "type", "title", "timestamp", "isRead"]
+    },
+    "StagedPhoto": {
+      "title": "Staged Room Photo",
+      "description": "A room photograph staged from mobile or desktop awaiting AI safety assessment",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User ID" },
+        "homeId": { "type": "string", "description": "Home ID" },
+        "roomId": { "type": "string", "description": "Room ID" },
+        "roomType": { "type": "string", "description": "Room category type" },
+        "title": { "type": "string", "description": "Photo label or title" },
+        "notes": { "type": "string", "description": "Observation notes" },
+        "imageUrl": { "type": "string", "description": "Image data URL or hosted link" },
+        "status": { "type": "string", "description": "Processing status" },
+        "capturedFrom": { "type": "string", "description": "Source device type" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of upload" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of update" }
+      },
+      "required": ["userId", "homeId", "roomType", "title", "imageUrl", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -96,6 +115,8 @@
     "/scans/{scanId}": { "schema": "Scan", "description": "Safety scans" },
     "/activities/{activityId}": { "schema": "Activity", "description": "Activity logs" },
     "/timelineEvents/{eventId}": { "schema": "TimelineEvent", "description": "Timeline events" },
-    "/notifications/{notificationId}": { "schema": "Notification", "description": "User notifications" }
+    "/notifications/{notificationId}": { "schema": "Notification", "description": "User notifications" },
+    "/stagedPhotos/{photoId}": { "schema": "StagedPhoto", "description": "Staged room photos awaiting safety analysis" }
   }
 }
+

@@ -1,17 +1,21 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue } from 'motion/react';
 import { Button } from "@/components/ui/button";
-import { Camera, CheckCircle2, ArrowUpRight, Plus } from "lucide-react";
+import { Camera, CheckCircle2, ArrowUpRight, Plus, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useHomeStore } from "@/stores/useHomeStore";
 import { useScanStore } from "@/stores/scanStore";
+import { useStagingStore } from "@/stores/useStagingStore";
 import { format } from "date-fns";
 import { LensMark } from "@/components/brand/LensMark";
 
 export function DashboardPage() {
   const { homes, loading: homesLoading } = useHomeStore();
   const { scans, loading: scansLoading } = useScanStore();
+  const { photos: stagedPhotos } = useStagingStore();
   const navigate = useNavigate();
+
+  const unscannedCount = useMemo(() => stagedPhotos.filter(p => p.status === 'unscanned').length, [stagedPhotos]);
 
   const primaryHome = homes[0];
   const allScans = useMemo(() => Object.values(scans).flat(), [scans]);
@@ -94,6 +98,20 @@ export function DashboardPage() {
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Button variant="brand" size="lg" onClick={() => navigate('/scan')}>
               <Camera className="mr-2 w-4 h-4" /> Run Assessment
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => navigate('/vault')}
+              className="bg-white/5 hover:bg-white/10 text-white border-white/15 backdrop-blur-md relative"
+            >
+              <Smartphone className="mr-2 w-4 h-4 text-brand" /> 
+              <span>Photo Vault</span>
+              {unscannedCount > 0 && (
+                <span className="ml-2 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-brand text-brand-foreground">
+                  {unscannedCount}
+                </span>
+              )}
             </Button>
             {primaryHome && (
               <Button

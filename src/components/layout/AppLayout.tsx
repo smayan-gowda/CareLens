@@ -1,17 +1,19 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { UserCircle, Plus } from "lucide-react";
+import { UserCircle, Plus, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LensMark } from "@/components/brand/LensMark";
 import { NotificationCenter } from "@/components/layout/NotificationCenter";
 import { useHomeStore } from "@/stores/useHomeStore";
+import { useStagingStore } from "@/stores/useStagingStore";
 
 const navItems = [
  { id: "01", label: "Overview", path: "/overview" },
  { id: "02", label: "Properties", path: "/properties" },
- { id: "03", label: "Assessments", path: "/assessments" },
- { id: "04", label: "Marketplace", path: "/marketplace" },
- { id: "05", label: "Network", path: "/network" },
+ { id: "03", label: "Photo Vault", path: "/vault" },
+ { id: "04", label: "Assessments", path: "/assessments" },
+ { id: "05", label: "Marketplace", path: "/marketplace" },
+ { id: "06", label: "Network", path: "/network" },
 ];
 
 /**
@@ -25,6 +27,8 @@ function LedgerBar() {
  const location = useLocation();
  const navigate = useNavigate();
  const { homes } = useHomeStore();
+ const { photos } = useStagingStore();
+ const unscannedCount = photos.filter(p => p.status === 'unscanned').length;
  const primaryHome = homes[0];
 
  return (
@@ -58,8 +62,11 @@ function LedgerBar() {
  <span className={cn("tabular text-[11px] transition-colors", isActive ? "text-brand" : "text-muted-foreground/40 group-hover:text-muted-foreground")}>
  {item.id}
  </span>
- <span className={cn("text-[13px] font-medium tracking-tight transition-colors", isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")}>
+ <span className={cn("text-[13px] font-medium tracking-tight transition-colors flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")}>
  {item.label}
+ {item.path === '/vault' && unscannedCount > 0 && (
+ <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+ )}
  </span>
  {isActive && (
  <motion.span

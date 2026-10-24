@@ -61,6 +61,17 @@ service cloud.firestore {
         && data.isRead is bool;
     }
 
+    function isValidStagedPhoto(data) {
+      return data.keys().hasAll(['userId', 'homeId', 'roomType', 'title', 'imageUrl', 'status', 'createdAt'])
+        && data.userId == request.auth.uid
+        && data.homeId is string
+        && data.roomType is string
+        && data.title is string && data.title.size() <= 200
+        && data.imageUrl is string
+        && data.status is string
+        && data.createdAt is string;
+    }
+
     // -------------------------------------------------------------------------
     // 3. Default Deny (Phase 4.1)
     // -------------------------------------------------------------------------
@@ -152,5 +163,14 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
+
+    match /stagedPhotos/{photoId} {
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidStagedPhoto(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidStagedPhoto(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
   }
 }
+

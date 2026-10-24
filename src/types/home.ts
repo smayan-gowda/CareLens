@@ -130,3 +130,19 @@ export interface UserProfile {
   notificationsEnabled: boolean;
   privacyLevel: 'Private' | 'Limited' | 'Public';
 }
+
+export interface StagedPhoto {
+  id: string;
+  userId: string;
+  homeId: string;
+  roomId?: string;
+  roomType: RoomType;
+  title: string;
+  notes?: string;
+  imageUrl: string;
+  status: 'unscanned' | 'scanned';
+  scanId?: string;
+  capturedFrom: 'mobile' | 'desktop';
+  createdAt: string;
+  updatedAt: string;
+}

@@ -874,7 +874,7 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
     try {
       const { latitude, longitude, term, categories, radius } = req.query;
       
-      const apiKey = process.env.YELP_API_KEY || "GD9xhB8AlwiF5FcC94vA2dZHbXKISQzM8CHWOoVLgwlxfopGW-l8HNF-L2NfR_fWx1ot8WODapfGItSeW-cp2OvxxB50BvyxcPMAO0e1cZw2yOfpWhx9OrlKFt9TanYx";
+      const apiKey = process.env.YELP_API_KEY || "yJnQFDePNHIKH70RXNDjybSBUnFPB9jo3swVq2dpqUcKKO4fs8qPzF4p58hx0_Mz-H3IxFKwh5DyMXGob0JOjfrXaFen_GqDSiVBOU4tkY3rRoUen-Gj8FVJiIXZanYx";
 
       if (!apiKey) {
         return res.status(400).json({ error: "Yelp API key is missing. Please set YELP_API_KEY." });

@@ -25,24 +25,30 @@ import { CommunityPage } from "./pages/CommunityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PhotoVaultPage } from "./pages/PhotoVaultPage";
+import { MobileUploadPage } from "./pages/MobileUploadPage";
 import { useHomeStore } from "./stores/useHomeStore";
 import { useScanStore } from "./stores/scanStore";
+import { useStagingStore } from "./stores/useStagingStore";
 
 function ProtectedRoute() {
   const { user, loading, initialized } = useAuthStore();
   const { subscribe: subscribeHome } = useHomeStore();
   const { subscribe: subscribeScan } = useScanStore();
+  const { subscribe: subscribeStaging } = useStagingStore();
 
   useEffect(() => {
     if (user) {
       const unsubHome = subscribeHome(user.uid);
       const unsubScan = subscribeScan(user.uid);
+      const unsubStaging = subscribeStaging(user.uid);
       return () => {
         unsubHome();
         unsubScan();
+        unsubStaging();
       };
     }
-  }, [user, subscribeHome, subscribeScan]);
+  }, [user, subscribeHome, subscribeScan, subscribeStaging]);
 
   if (!initialized || loading) {
     return <div className="h-screen w-screen flex items-center justify-center bg-background">
@@ -72,10 +78,13 @@ export default function App() {
           
           <Route element={<ProtectedRoute />}>
             <Route path="/welcome" element={<OnboardingPage />} />
+            <Route path="/vault/mobile" element={<MobileUploadPage />} />
 
             <Route element={<AppLayout />}>
               <Route path="/overview" element={<DashboardPage />} />
               <Route path="/scan" element={<ScanPage />} />
+              <Route path="/vault" element={<PhotoVaultPage />} />
+              <Route path="/staging" element={<Navigate to="/vault" replace />} />
               <Route path="/properties/:homeId/rooms/:roomId/scan" element={<ScanPage />} />
               <Route path="/properties/:homeId/rooms/:roomId/assessments/:reportId" element={<ReportPage />} />
               <Route path="/properties" element={<HomesPage />} />
