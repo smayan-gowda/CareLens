@@ -145,7 +145,7 @@ export const analysisService = {
         hazards,
         recommendations,
         assessmentTrace: {
-          model: 'gemma-4-31b-it',
+          model: 'google/gemma-4-31B-it',
           rulesVersion: '2.4.0',
           evaluatedAt: new Date().toISOString(),
           imageId: scanId,

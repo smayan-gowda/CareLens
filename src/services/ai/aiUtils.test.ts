@@ -47,16 +47,16 @@ describe("AI Utilities", () => {
       };
     });
 
-    it("should succeed with primary model (gemma-4-31b-it)", async () => {
+    it("should succeed with primary model (google/gemma-4-31B-it)", async () => {
       mockAi.models.generateContent.mockResolvedValue("primary-success");
       const result = await safeGenerateContent(mockAi, { contents: [] });
       expect(result).toBe("primary-success");
-      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemma-4-31b-it" }));
+      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "google/gemma-4-31B-it" }));
     });
 
-    it("should fallback to secondary model (gemma-4-31b) if primary fails", async () => {
+    it("should fall back to Gemini if the Gemma model fails", async () => {
       mockAi.models.generateContent.mockImplementation(({ model }: { model: string }) => {
-        if (model === "gemma-4-31b-it") {
+        if (model === "google/gemma-4-31B-it") {
           return Promise.reject({ status: 500, message: "Gemma 4 Failed" });
         }
         return Promise.resolve("fallback-success");
@@ -64,7 +64,7 @@ describe("AI Utilities", () => {
 
       const result = await safeGenerateContent(mockAi, { contents: [] });
       expect(result).toBe("fallback-success");
-      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemma-4-31b" }));
+      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemini-3.8-flash" }));
     });
 
     it("should fail if all models fail", async () => {
