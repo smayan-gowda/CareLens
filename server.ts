@@ -909,7 +909,14 @@ async function startServer() {
       }
 
       // Agnes AI API configuration
-      const agnesApiKey = process.env.AGNES_API_KEY || 'sk-0nnrqE1AhxNghlnE0dFYbXimUjxVHaghqeW2NMA8loXV1XU0';
+      const agnesApiKey = process.env.AGNES_API_KEY;
+      if (!agnesApiKey) {
+        return res.status(400).json({
+          success: false,
+          error: "ai_generation_unavailable",
+          errors: ["Agnes image generation is optional. Set AGNES_API_KEY to enable it."]
+        });
+      }
 
       let generatedPrompt = `Transform the room to simultaneously install and clearly display ALL of the following safety and accessibility features: ${upgrades.join('; ')}. Every single one of these items must be separately, clearly, and visibly added to the room in their appropriate, logical locations. Keep the original room layout, flooring, walls, lighting, and major furniture identical. Photographic, realistic, 4k, interior design, high visual density, all safety features visible.`;
 
@@ -995,7 +1002,7 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
     try {
       const { latitude, longitude, term, categories, radius } = req.query;
       
-      const apiKey = process.env.YELP_API_KEY || "yJnQFDePNHIKH70RXNDjybSBUnFPB9jo3swVq2dpqUcKKO4fs8qPzF4p58hx0_Mz-H3IxFKwh5DyMXGob0JOjfrXaFen_GqDSiVBOU4tkY3rRoUen-Gj8FVJiIXZanYx";
+      const apiKey = process.env.YELP_API_KEY;
 
       if (!apiKey) {
         return res.status(400).json({ error: "Yelp API key is missing. Please set YELP_API_KEY." });
