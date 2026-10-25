@@ -187,6 +187,7 @@ export function ReportPage() {
             dynamicScan.spatialFindings ??
             analyzeSpatialRelationships(dynamicScan.detectedObjects || [])
           }
+          detectedObjects={dynamicScan.detectedObjects || []}
         />
 
         <KeyFindings
