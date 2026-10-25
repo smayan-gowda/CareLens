@@ -9,6 +9,7 @@ import { ROOM_ANALYSIS_PROMPT } from "./src/services/ai/prompts";
 
 import { safeGenerateContent, safeTranscribeAudio } from "./src/services/ai/aiUtils";
 import { parseJsonObjectResponse } from "./src/services/ai/jsonResponseParser";
+import { extractGeneratedImage } from "./src/services/ai/generatedImageResult";
 
 function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
   const normalizedType = (roomType || "Bathroom").trim().toLowerCase();
@@ -972,21 +973,23 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
         body: JSON.stringify(payload)
       });
 
-      const agnesData = await agnesRes.json();
-
-      if (agnesRes.ok && agnesData.data && agnesData.data.length > 0 && agnesData.data[0].url) {
-        const generatedImageUrl = agnesData.data[0].url;
-        console.log("Agnes AI image-to-image generation successful:", generatedImageUrl);
-        res.json({ success: true, image: generatedImageUrl });
-      } else {
-        const errMsg = agnesData?.error?.message || "Failed to generate image via Agnes AI";
-        console.error("Agnes AI failed:", agnesData);
-        res.json({
+      const agnesData = await agnesRes.json().catch(() => null);
+      const generatedImage = extractGeneratedImage(agnesData);
+      if (!agnesRes.ok || !generatedImage) {
+        const errMsg =
+          agnesData?.error?.message ||
+          agnesData?.message ||
+          `Agnes AI returned HTTP ${agnesRes.status} without a supported image result`;
+        console.error("Agnes AI did not return a usable image:", errMsg);
+        return res.status(502).json({
           success: false,
           error: "ai_generation_unavailable",
           errors: [errMsg]
         });
       }
+
+      console.log("Agnes AI image-to-image generation returned a usable image");
+      res.json({ success: true, image: generatedImage });
 
     } catch (error: any) {
       console.error("Error generating safety visualization:", error);
