@@ -8,6 +8,7 @@ import { WebSocketServer } from "ws";
 import { ROOM_ANALYSIS_PROMPT } from "./src/services/ai/prompts";
 
 import { safeGenerateContent, safeTranscribeAudio } from "./src/services/ai/aiUtils";
+import { parseJsonObjectResponse } from "./src/services/ai/jsonResponseParser";
 
 function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
   const normalizedType = (roomType || "Bathroom").trim().toLowerCase();
@@ -846,11 +847,7 @@ async function startServer() {
       });
 
       if (response.text) {
-        let jsonString = response.text.trim();
-        if (jsonString.startsWith('```json')) {
-            jsonString = jsonString.slice(7, -3);
-        }
-        const json = JSON.parse(jsonString);
+        const json = parseJsonObjectResponse(response.text);
         res.json(json);
       } else {
         throw new Error("No text response from Gemini");
