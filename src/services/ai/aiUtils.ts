@@ -35,6 +35,7 @@ export async function retryWithBackoff<T>(
 export async function safeGenerateContent(ai: GoogleGenAI, params: any) {
   const modelsToTry = [
     "google/gemma-4-31B-it",
+    "gemma-4-26b-a4b-it",
     "gemini-3.8-flash"
   ];
 
