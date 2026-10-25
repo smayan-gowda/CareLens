@@ -27,7 +27,6 @@ import {
  ShoppingBag, 
  Globe, 
  List, 
- SlidersHorizontal, 
  Navigation,
  Check,
  RefreshCw,
@@ -211,50 +210,36 @@ const getSpecialtiesForCategory = (categoryName: string, yelpTitles: string[]): 
  }
 };
 
-// Smart Match Score Logic (0 to 100) comparing Provider Specialties/Categories with Latest Scan recommendations
+// Transparent trade relevance scoring (0-3 rank) comparing provider specialties with latest scan recommendations
 const calculateMatchScore = (provider: any, latestScan: any): number => {
- let score = 72; // Baseline
- 
- // Rating-driven boost
- score += Math.round((provider.rating || 4.0) * 4.5); // Up to +22 points
+  if (!latestScan || !latestScan.recommendations) {
+    return provider.rating ? Math.round(provider.rating * 10) : 40;
+  }
 
- if (!latestScan || !latestScan.recommendations) {
- return Math.min(99, score);
- }
+  const searchableString = [
+    ...(provider.categories || []),
+    ...(provider.specialties || []),
+    provider.name || ""
+  ].join(" ").toLowerCase();
 
- const searchableString = [
- ...(provider.categories || []),
- ...(provider.specialties || []),
- provider.name
- ].join(" ").toLowerCase();
+  let rank = 10;
+  latestScan.recommendations.forEach((rec: any) => {
+    const recTitle = (rec.title || "").toLowerCase();
+    if (searchableString.includes("plumb") && (recTitle.includes("plumb") || recTitle.includes("shower") || recTitle.includes("tub") || recTitle.includes("grab bar"))) {
+      rank += 25;
+    }
+    if (searchableString.includes("floor") && (recTitle.includes("floor") || recTitle.includes("slip") || recTitle.includes("rug") || recTitle.includes("mat"))) {
+      rank += 25;
+    }
+    if (searchableString.includes("light") && (recTitle.includes("light") || recTitle.includes("sensor") || recTitle.includes("illumination"))) {
+      rank += 25;
+    }
+    if ((searchableString.includes("accessibility") || searchableString.includes("ada") || searchableString.includes("handyman")) && (recTitle.includes("rail") || recTitle.includes("grab bar") || recTitle.includes("ramp"))) {
+      rank += 25;
+    }
+  });
 
- let matchesCount = 0;
- latestScan.recommendations.forEach((rec: any) => {
- const recTitle = rec.title.toLowerCase();
- 
- // Simple conceptual tags matching
- if (searchableString.includes("plumb") && (recTitle.includes("plumb") || recTitle.includes("leak") || recTitle.includes("shower") || recTitle.includes("tub") || recTitle.includes("toilet") || recTitle.includes("grab bar"))) {
- matchesCount++;
- }
- if (searchableString.includes("floor") && (recTitle.includes("floor") || recTitle.includes("slip") || recTitle.includes("trip") || recTitle.includes("mat") || recTitle.includes("carpet") || recTitle.includes("rug"))) {
- matchesCount++;
- }
- if (searchableString.includes("light") && (recTitle.includes("light") || recTitle.includes("dark") || recTitle.includes("bulb") || recTitle.includes("glare") || recTitle.includes("illumination") || recTitle.includes("sensor"))) {
- matchesCount++;
- }
- if (searchableString.includes("accessibility") || searchableString.includes("ada") || searchableString.includes("handyman")) {
- if (recTitle.includes("ramp") || recTitle.includes("rail") || recTitle.includes("grab bar") || recTitle.includes("support") || recTitle.includes("remodel") || recTitle.includes("barrier")) {
- matchesCount++;
- }
- }
- });
-
- if (matchesCount > 0) {
- score += Math.min(20, matchesCount * 10);
- }
-
- // Cap matching between 65% and 99%
- return Math.min(99, Math.max(65, score));
+  return rank;
 };
 
 export function ResourcesPage() {
@@ -283,14 +268,13 @@ export function ResourcesPage() {
  const [coords, setCoords] = useState({ lat: 30.2672, lng: -97.7431 });
 
  // Filter Configurations (Advanced Filters)
- const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
- const [searchRadius, setSearchRadius] = useState<number>(15); // miles
- const [minRating, setMinRating] = useState<number>(0);
- const [priceLevel, setPriceLevel] = useState<number | null>(null);
- const [openNow, setOpenNow] = useState(false);
- const [ecoFriendlyOnly, setEcoFriendlyOnly] = useState(false);
- const [fastestAvailabilityOnly, setFastestAvailabilityOnly] = useState(false);
- const [sortBy, setSortBy] = useState<'match' | 'rating' | 'distance' | 'popularity'>('match');
+ const [searchRadius] = useState<number>(15); // miles
+ const [minRating] = useState<number>(0);
+ const [priceLevel] = useState<number | null>(null);
+ const [openNow] = useState(false);
+ const [ecoFriendlyOnly] = useState(false);
+ const [fastestAvailabilityOnly] = useState(false);
+ const [sortBy] = useState<'match' | 'rating' | 'distance' | 'popularity'>('match');
 
  // Mobile split toggle (Zillow/Airbnb style list vs map on small screens)
  const [mobileViewMode, setMobileViewMode] = useState<'list' | 'map'>('list');
@@ -1344,6 +1328,14 @@ export function ResourcesPage() {
  </div>
  </div>
 
+ {/* Directory Verification Disclosure Banner */}
+ <div className="p-3.5 bg-muted/40 border border-border rounded-xl text-xs text-muted-foreground flex items-start gap-2.5 max-w-4xl">
+ <MapPin className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+ <p className="leading-relaxed">
+ <strong className="text-foreground font-medium">Independent Directory Notice:</strong> Local trade specialists and suppliers are indexed from public business directories for neighborhood discovery. CareLens does not endorse, employ, or guarantee contractor licensing or insurance. Always request proof of credentials, bonding, and local permits directly.
+ </p>
+ </div>
+
  {/* Tab Selection */}
  <div className="flex bg-muted/30 p-1 rounded-md border border-border self-start md:self-auto">
  {[
@@ -1376,304 +1368,114 @@ export function ResourcesPage() {
  {/* Main Core Section */}
  <div className="grid lg:grid-cols-12 gap-6 items-start">
  
- {/* Left Column: Context panel, filters, and smart AI matching suggestions (Span 4) */}
- <div className="lg:col-span-4 space-y-6">
- 
- {/* Main Keywords and Location Search — with AI categorization built-in */}
- <div className="space-y-5">
- <div className="space-y-2">
- <div className="relative w-full flex items-center">
- <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/60" />
- <Input 
- id="keyword-filter-bar"
- placeholder="Search specialties — grab bars, ramps, rewiring..." 
- className="pl-10 pr-28 h-14 rounded-none border-0 border-b border-border focus-visible:border-brand bg-transparent text-base md:text-lg shadow-none focus-visible:ring-0" 
- value={searchQuery}
- onChange={(e) => setSearchQuery(e.target.value)}
- onKeyDown={(e) => {
- if (e.key === "Enter" && searchQuery.trim()) {
- e.preventDefault();
- handleAISearch(searchQuery);
- }
- }}
- />
- <Button
- id="ai-categorize-search-btn"
- type="button"
- size="sm"
- variant="outline"
- onClick={() => handleAISearch(searchQuery)}
- disabled={isAISearching || !searchQuery.trim()}
- className="absolute right-0 top-1/2 -translate-y-1/2 gap-1.5 h-9 px-3 text-xs font-semibold border-brand/40 hover:border-brand hover:bg-brand/10 text-brand transition-all shrink-0"
- >
- {isAISearching ? (
- <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand" />
- ) : (
- <Sparkles className="w-3.5 h-3.5 text-brand" />
- )}
- <span>AI Filter</span>
- </Button>
- </div>
+  {/* Left Column: Context panel and search (Span 4) */}
+  <div className="lg:col-span-4 space-y-8">
+    <div className="space-y-6">
+      {/* Primary Search */}
+      <div className="space-y-3">
+        <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70 block">Discovery</label>
+        <div className="relative group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 transition-colors group-focus-within:text-brand" />
+          <Input 
+            id="keyword-filter-bar"
+            placeholder="Search specialties..." 
+            className="pl-10 h-12 bg-muted/20 border-border/50 focus-visible:border-brand/50 focus-visible:ring-0 text-sm transition-all shadow-none rounded-none" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                e.preventDefault();
+                handleAISearch(searchQuery);
+              }
+            }}
+          />
+          {isAISearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand/60" />
+            </div>
+          )}
+        </div>
 
- {/* AI Active Banner in Search Column */}
- <AnimatePresence>
- {aiCategorizedInfo && (
- <motion.div
- initial={{ opacity: 0, height: 0 }}
- animate={{ opacity: 1, height: "auto" }}
- exit={{ opacity: 0, height: 0 }}
- className="p-3 bg-brand/10 border border-brand/30 rounded-md text-xs flex items-start justify-between gap-2 overflow-hidden mt-2"
- >
- <div className="flex items-start gap-2 min-w-0">
- <div className="p-1 bg-brand text-brand-foreground rounded-xs shrink-0 mt-0.5">
- <Sparkles className="w-3 h-3" />
- </div>
- <div className="min-w-0">
- <div className="flex items-center gap-1.5 flex-wrap">
- <span className="font-semibold text-foreground">
- AI Category: <span className="text-brand font-bold">{aiCategorizedInfo.category}</span>
- </span>
- </div>
- <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
- Filtering stores for "<span className="text-foreground italic">{aiCategorizedInfo.originalQuery}</span>"
- </p>
- </div>
- </div>
- <button
- id="clear-ai-categorized-filter"
- onClick={() => {
- setAiCategorizedInfo(null);
- setSelectedCategory("All");
- setSearchQuery("");
- }}
- className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xs transition-colors shrink-0"
- title="Reset AI filter"
- >
- <X className="w-3.5 h-3.5" />
- </button>
- </motion.div>
- )}
- </AnimatePresence>
- </div>
+        {/* AI Active Banner Integrated quietly */}
+        <AnimatePresence>
+          {aiCategorizedInfo && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="p-3 bg-brand/5 border border-brand/10 rounded-sm text-[11px] flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="w-3 h-3 text-brand shrink-0" />
+                <span className="truncate text-muted-foreground">
+                  Refining for <span className="text-foreground font-medium">{aiCategorizedInfo.category}</span>
+                </span>
+              </div>
+              <button
+                id="clear-ai-categorized-filter"
+                onClick={() => {
+                  setAiCategorizedInfo(null);
+                  setSelectedCategory("All");
+                  setSearchQuery("");
+                }}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
- {activeTab === 'local' && (
- <div className="space-y-4 pt-1">
- <form onSubmit={(e) => {
- e.preventDefault();
- handleSearchSubmit();
- }} className="flex gap-2">
- <div className="relative flex-1">
- <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
- <Input 
- id="search-address-input"
- placeholder="City, state, or ZIP..." 
- className="pl-11 h-11 bg-muted/40 border-transparent focus-visible:border-brand text-sm transition-all" 
- value={locationQuery}
- onChange={(e) => setLocationQuery(e.target.value)}
- />
- </div>
- <Button id="submit-search-btn" variant="brand" type="submit" className="shrink-0">
- Search
- </Button>
- </form>
+      {/* Location Search */}
+      {activeTab === 'local' && (
+        <div className="space-y-3">
+          <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70 block">Location</label>
+          <div className="flex flex-col gap-2">
+            <div className="relative group">
+              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50 transition-colors group-focus-within:text-brand" />
+              <Input 
+                id="search-address-input"
+                placeholder="City or ZIP code" 
+                className="pl-10 h-12 bg-muted/20 border-border/50 focus-visible:border-brand/50 focus-visible:ring-0 text-sm transition-all shadow-none rounded-none" 
+                value={locationQuery}
+                onChange={(e) => setLocationQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSearchSubmit();
+                  }
+                }}
+              />
+            </div>
+            <Button 
+              id="submit-search-btn" 
+              variant="outline" 
+              onClick={handleSearchSubmit}
+              disabled={isLoading}
+              className="h-10 border-border/50 hover:bg-muted/30 text-xs font-semibold rounded-none"
+            >
+              Update Map
+            </Button>
+          </div>
+        </div>
+      )}
 
- {/* GPS and Popular cities quick selection */}
- <div className="space-y-3 pt-1">
- <div className="flex items-center justify-between">
- <span className="field-tag text-muted-foreground">Quick locations</span>
- <button 
- id="use-gps-locate-btn"
- onClick={handleGPSLocate}
- className="text-xs font-medium text-foreground hover:text-brand flex items-center gap-1.5 active:scale-95 transition-all"
- >
- <Globe className="w-3.5 h-3.5 text-success" /> Use GPS
- </button>
- </div>
- <div className="flex flex-wrap gap-2">
- {QUICK_CITIES.map(city => {
- const isActive = activeCityName.toLowerCase().includes(city.name.split(',')[0].toLowerCase());
- return (
- <button
- key={city.name}
- id={`quick-search-city-${city.name.replace(/[^a-zA-Z]/g, '')}`}
- onClick={() => handleCityClick(city)}
- className={`px-4 py-2 rounded-md text-xs transition-all border ${
- isActive
- ? 'bg-foreground text-background border-foreground shadow-sm'
- : 'bg-card text-muted-foreground border-border hover:bg-muted/50 hover:text-foreground'
- }`}
- >
- {city.name.split(',')[0]}
- </button>
- );
- })}
- </div>
- </div>
- </div>
- )}
- </div>
-
- {/* Filters — elegant chips and inline controls, not a boxed sidebar drawer */}
- {activeTab === 'local' && (
- <div className="space-y-5 pt-2 border-t border-border">
- <div className="flex items-center justify-between">
- <span className="field-tag text-muted-foreground flex items-center gap-2">
- <SlidersHorizontal className="w-3.5 h-3.5" />
- Filters
- </span>
- <button
- id="toggle-filters-drawer-btn"
- onClick={() => setShowFiltersDrawer(!showFiltersDrawer)}
- className="text-xs text-brand hover:underline font-medium"
- >
- {showFiltersDrawer ? "Hide" : "Show all"}
- </button>
- </div>
-
- <div className={`space-y-5 transition-all duration-300 overflow-hidden ${showFiltersDrawer ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
-
- {/* Search radius */}
- <div className="space-y-2">
- <div className="flex justify-between text-xs">
- <span className="text-muted-foreground">Search radius</span>
- <span className="tabular text-brand font-medium">{searchRadius} mi</span>
- </div>
- <input
- id="search-radius-slider"
- type="range"
- min="5"
- max="50"
- step="5"
- value={searchRadius}
- onChange={(e) => setSearchRadius(parseInt(e.target.value))}
- className="w-full accent-[var(--brand)] cursor-pointer"
- />
- </div>
-
- {/* Rating chips */}
- <div className="space-y-2">
- <span className="text-xs text-muted-foreground block">Minimum rating</span>
- <div className="flex flex-wrap gap-1.5">
- {[0, 3.5, 4.0, 4.5].map((val) => (
- <button
- key={val}
- type="button"
- id={`rating-filter-choice-${val}`}
- onClick={() => setMinRating(val)}
- className={`px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors ${
- minRating === val
- ? 'bg-foreground text-background border-foreground'
- : 'bg-background text-muted-foreground border-border hover:bg-muted'
- }`}
- >
- {val === 0 ? "Any" : `${val}★`}
- </button>
- ))}
- </div>
- </div>
-
- {/* Price chips */}
- <div className="space-y-2">
- <span className="text-xs text-muted-foreground block">Price tier</span>
- <div className="flex flex-wrap gap-1.5">
- {[null, 1, 2, 3, 4].map((val) => (
- <button
- key={val === null ? 'any' : val}
- type="button"
- id={`price-filter-choice-${val}`}
- onClick={() => setPriceLevel(val)}
- className={`px-3 py-1.5 rounded-sm text-xs font-medium border transition-colors ${
- priceLevel === val
- ? 'bg-foreground text-background border-foreground'
- : 'bg-background text-muted-foreground border-border hover:bg-muted'
- }`}
- >
- {val === null ? "Any" : "$".repeat(val)}
- </button>
- ))}
- </div>
- </div>
-
- {/* Toggle filters */}
- <div className="space-y-0 pt-1">
- {[
- { id: 'filter-open-now', label: 'Open now', checked: openNow, set: setOpenNow },
- { id: 'filter-eco-friendly', label: 'Eco-friendly specialists', checked: ecoFriendlyOnly, set: setEcoFriendlyOnly },
- { id: 'filter-fastest', label: 'Same-day availability', checked: fastestAvailabilityOnly, set: setFastestAvailabilityOnly },
- ].map((row) => (
- <div key={row.id} className="flex items-center justify-between py-2.5 border-b border-border last:border-b-0">
- <Label htmlFor={row.id} className="text-sm text-foreground font-normal">{row.label}</Label>
- <Switch id={row.id} checked={row.checked} onCheckedChange={row.set} />
- </div>
- ))}
- </div>
- </div>
-
- {/* Sort — always visible */}
- <div className="space-y-1.5 pt-1">
- <label className="field-tag text-muted-foreground block">Sort by</label>
- <select
- id="sort-listings-selector"
- value={sortBy}
- onChange={(e: any) => setSortBy(e.target.value)}
- className="w-full h-10 px-3 border border-border bg-background text-sm text-foreground focus:outline-none focus:border-brand"
- >
- <option value="match">Best match</option>
- <option value="rating">Highest rated</option>
- <option value="distance">Closest</option>
- <option value="popularity">Most reviewed</option>
- </select>
- </div>
- </div>
- )}
-
- {/* Quietly ties the assessment to what's shown below — no "AI" banner */}
- <div className="space-y-4 pt-2 border-t border-border">
- <span className="field-tag text-muted-foreground">From your assessment</span>
-
- {latestScan ? (
- <div className="space-y-3">
- <p className="text-sm text-muted-foreground leading-relaxed">
- Based on your latest <span className="text-foreground font-medium">{latestScan.roomType}</span> assessment, these are worth a closer look.
- </p>
- <div className="space-y-0 border-t border-border">
- {latestScan.recommendations?.slice(0, 4).map((rec, idx) => {
- const recId = rec.id || idx;
- const isCurrentClassifying = classifyingRecId === recId;
- return (
- <div
- key={recId}
- onClick={() => handleRecommendationClick(rec, idx)}
- className={`group flex items-start justify-between gap-3 py-3 border-b border-border last:border-b-0 cursor-pointer transition-colors ${
- isCurrentClassifying ? 'pointer-events-none opacity-60' : 'hover:text-brand'
- }`}
- >
- <div className="min-w-0">
- <p className="text-sm font-medium line-clamp-1 group-hover:text-brand transition-colors">{rec.title}</p>
- <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{rec.description}</p>
- </div>
- {isCurrentClassifying ? (
- <div className="flex items-center gap-1.5 text-[10px] text-brand shrink-0 mt-0.5">
- <RefreshCw className="w-3 h-3 animate-spin" />
- </div>
- ) : (
- <span className={`field-tag shrink-0 mt-0.5 ${rec.priority === 'Critical' || rec.priority === 'High' ? 'text-destructive' : 'text-warning'}`}>
- {rec.priority}
- </span>
- )}
- </div>
- );
- })}
- </div>
- </div>
- ) : (
- <p className="text-sm text-muted-foreground leading-relaxed">
- Run a room scan and we'll surface the specialists most relevant to what it finds.
- </p>
- )}
- </div>
- </div>
-
+      {/* Contextual Note */}
+      {latestScan && (
+        <div className="pt-6 border-t border-border/50">
+          <div className="flex gap-3">
+            <div className="mt-0.5">
+              <Sparkles className="w-3.5 h-3.5 text-brand/60" />
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Results are prioritized using your <span className="text-foreground font-medium">{latestScan.roomType}</span> assessment data to surface the most relevant local safety specialists.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
 
  {/* Right Column: the map is the centerpiece — large, minimal chrome */}
  <div className="lg:col-span-8 flex flex-col min-h-[680px] bg-card border border-border overflow-hidden">
@@ -1779,16 +1581,10 @@ export function ResourcesPage() {
  <p className="text-sm font-medium">Nothing matches yet</p>
  <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">Try a wider radius or clearing a filter.</p>
  </div>
- <Button id="reset-filters-btn" variant="outline" size="sm" onClick={() => {
- setMinRating(0);
- setPriceLevel(null);
- setOpenNow(false);
- setEcoFriendlyOnly(false);
- setFastestAvailabilityOnly(false);
- setSelectedCategory("All");
- setSearchQuery("");
- setSearchRadius(15);
- }}>Reset Filters</Button>
+  <Button id="reset-filters-btn" variant="outline" size="sm" onClick={() => {
+    setSelectedCategory("All");
+    setSearchQuery("");
+  }}>Clear Search</Button>
  </div>
  ) : (
  filteredProviders.map((prov, index) => {
@@ -1860,16 +1656,17 @@ export function ResourcesPage() {
  </div>
  </div>
 
- {/* Match Score with reasoning — the signature feature, not a bare percentage */}
+ {/* Descriptive Trade Badge & Verified Features */}
  <div className="mt-3 pl-0">
- <div className="flex items-center gap-2 mb-2">
- <span className="tabular text-sm font-semibold text-success">{prov.matchScore}%</span>
- <span className="text-xs font-medium text-success">{matchLabel(prov.matchScore)}</span>
+ <div className="flex items-center gap-2 mb-2 flex-wrap">
+ <span className="text-xs font-semibold text-brand px-2 py-0.5 bg-brand/10 rounded">
+ {matchLabel(prov, latestScan)}
+ </span>
  </div>
  <ul className="space-y-1">
  {reasons.map((reason, i) => (
  <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
- <Check className="w-3 h-3 text-success shrink-0 mt-0.5" strokeWidth={2.5} />
+ <Check className="w-3 h-3 text-brand shrink-0 mt-0.5" strokeWidth={2.5} />
  <span className="leading-relaxed">{reason}</span>
  </li>
  ))}
@@ -1908,8 +1705,9 @@ export function ResourcesPage() {
  <div className="flex items-start justify-between gap-3">
  <div className="min-w-0">
  <div className="flex items-center gap-2 mb-1">
- <span className="tabular text-sm font-semibold text-success">{selectedProvider.matchScore}%</span>
- <span className="text-xs font-medium text-success">{matchLabel(selectedProvider.matchScore)}</span>
+ <span className="text-xs font-semibold text-brand px-2 py-0.5 bg-brand/10 rounded">
+ {matchLabel(selectedProvider, latestScan)}
+ </span>
  </div>
  <h4 className="font-semibold text-base tracking-tight truncate">{selectedProvider.name}</h4>
  <p className="text-xs text-muted-foreground flex items-start gap-1 mt-1">

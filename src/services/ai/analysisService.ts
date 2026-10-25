@@ -3,6 +3,7 @@ import { analyzeRoomImage } from './visionAnalyzer';
 import { extractHazards } from './safetyAnalyzer';
 import { generateRecommendations } from './recommendationGenerator';
 import { compressImageDataUrl } from '@/utils/imageCompression';
+import { getScoreFormulaBreakdown } from '@/components/reports/reportMath';
 
 async function getBase64FromUrl(url: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
@@ -96,7 +97,6 @@ export const analysisService = {
     const processedImages = processedImagesArrays.flat();
     
     if (onProgress) onProgress(2, 35);
-    
     if (onProgress) onProgress(3, 55);
 
     try {
@@ -108,9 +108,6 @@ export const analysisService = {
       
       if (onProgress) onProgress(5, 90);
       
-      const hazards = extractHazards(result, scanId);
-      const recommendations = generateRecommendations(result, hazards);
-      
       const detectedObjects = result.detectedObjects.map((obj, i) => ({
         id: `obj-${Date.now()}-${i}`,
         name: obj.name,
@@ -118,9 +115,16 @@ export const analysisService = {
         boundingBox: obj.boundingBox
       }));
 
+      const hazards = extractHazards(result, scanId);
+      const recommendations = generateRecommendations(result, hazards);
+
       if (onProgress) onProgress(6, 100);
 
       const savedImage = await compressImageDataUrl(processedImages[0], 1280, 1280, 0.75, 250);
+
+      // Compute deterministic score based on detected hazards
+      const scoreBreakdown = getScoreFormulaBreakdown(hazards);
+      const deterministicSafetyScore = scoreBreakdown.calculatedScore;
 
       return {
         id: scanId,
@@ -129,13 +133,21 @@ export const analysisService = {
         createdAt: new Date().toISOString(),
         images: [savedImage],
         status: 'Completed',
-        safetyScore: result.overallSafetyScore,
+        safetyScore: deterministicSafetyScore,
+        initialSafetyScore: deterministicSafetyScore,
         subScores: result.subScores,
         roomType: result.roomType,
         roomConfidence: result.confidence,
         detectedObjects,
         hazards,
-        recommendations
+        recommendations,
+        assessmentTrace: {
+          model: 'gemma-4-31b-it',
+          rulesVersion: '2.4.0',
+          evaluatedAt: new Date().toISOString(),
+          imageId: scanId,
+          engineVersion: 'carelens-vision-v2',
+        },
       };
     } catch (e) {
       console.error(e);

@@ -23,15 +23,15 @@ import { useStagingStore } from "@/stores/useStagingStore";
 import { RoomType } from "@/types/home";
 
 const ROOM_OPTIONS: { type: RoomType; label: string; placeholder: string; noteHint: string }[] = [
-  { type: "bathroom", label: "Bathroom", placeholder: "e.g. Shower curb & floor mat", noteHint: "Note any slick tiles, missing grab bars, or steep tub rims" },
-  { type: "bedroom", label: "Bedroom", placeholder: "e.g. Bedside pathway & rug", noteHint: "Note low nightstand lighting, loose cords, or tall bed height" },
-  { type: "kitchen", label: "Kitchen", placeholder: "e.g. Stove front & cabinet reach", noteHint: "Note overhead cabinet heights, anti-fatigue mats, or spills" },
-  { type: "living", label: "Living Room", placeholder: "e.g. Coffee table walking lane", noteHint: "Note coffee table corners, low couches, or trailing wires" },
-  { type: "hallway", label: "Hallway", placeholder: "e.g. Main corridor to bathroom", noteHint: "Note narrow turns, runner rugs, or night light coverage" },
-  { type: "staircase", label: "Staircase", placeholder: "e.g. Top flight & handrail", noteHint: "Note handrail stability, step edge visibility, or glare" },
-  { type: "entryway", label: "Entryway / Foyer", placeholder: "e.g. Front threshold & mat", noteHint: "Note door threshold lip, shoe clutter, or weather mats" },
-  { type: "dining", label: "Dining Room", placeholder: "e.g. Chair clearance & floor", noteHint: "Note chair stability with armrests, rug edges" },
-  { type: "laundry", label: "Laundry Room", placeholder: "e.g. Washer doorway transition", noteHint: "Note detergent reach, floor water risks, or thresholds" },
+  { type: "bathroom", label: "Bathroom", placeholder: "e.g. Shower entrance & floor mat", noteHint: "Note floor surfaces, grab bar availability, or threshold transitions" },
+  { type: "bedroom", label: "Bedroom", placeholder: "e.g. Bedside pathway & rug", noteHint: "Note path lighting, loose cords, or bed height" },
+  { type: "kitchen", label: "Kitchen", placeholder: "e.g. Preparation counter & cabinets", noteHint: "Note cabinet reaching height, floor mats, or lighting" },
+  { type: "living", label: "Living Room", placeholder: "e.g. Walking lane around seating", noteHint: "Note table corners, seating support, or trailing wires" },
+  { type: "hallway", label: "Hallway", placeholder: "e.g. Main corridor pathway", noteHint: "Note passage clearance, runner rugs, or night lights" },
+  { type: "staircase", label: "Staircase", placeholder: "e.g. Stair steps & handrails", noteHint: "Note handrail coverage, step edge contrast, or lighting" },
+  { type: "entryway", label: "Entryway / Foyer", placeholder: "e.g. Threshold & entrance floor", noteHint: "Note door threshold lip, floor mats, or entryway lighting" },
+  { type: "dining", label: "Dining Room", placeholder: "e.g. Seating clearance & floor", noteHint: "Note chair stability, armrests, or rug edges" },
+  { type: "laundry", label: "Laundry Room", placeholder: "e.g. Washer area transition", noteHint: "Note storage reach, floor surface, or thresholds" },
   { type: "garage", label: "Garage / Ramp", placeholder: "e.g. Interior step into house", noteHint: "Note handrails, lighting, or floor level changes" },
   { type: "custom", label: "Other / General", placeholder: "e.g. Porch transition", noteHint: "Note any specific mobility or fall risk observation" }
 ];

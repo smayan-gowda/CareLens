@@ -19,6 +19,7 @@ import {
 
 import { compressImageDataUrl } from '@/utils/imageCompression';
 import { processImageForStorage } from '@/services/storageService';
+import { getScoreFormulaBreakdown } from '@/components/reports/reportMath';
 
 interface ScanState {
   scans: Record<string, ScanResult[]>;
@@ -34,6 +35,7 @@ interface ScanState {
   getScansForRoom: (roomId: string) => ScanResult[];
   getScanById: (scanId: string) => ScanResult | undefined;
   toggleRecommendation: (scanId: string, recommendationId: string) => Promise<boolean>;
+  updateHazardFeedback: (scanId: string, hazardId: string, feedback: 'helpful' | 'not_present' | 'needs_review') => Promise<void>;
 }
 
 export const useScanStore = create<ScanState>()(
@@ -48,7 +50,8 @@ export const useScanStore = create<ScanState>()(
       subscribe: (userId: string) => {
         set({ loading: true });
         
-        const scansQuery = query(collection(db, 'scans'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+        // Single field query prevents composite index failures on new environments
+        const scansQuery = query(collection(db, 'scans'), where('userId', '==', userId));
         
         const unsub = onSnapshot(scansQuery, (snapshot) => {
           const scansMap: Record<string, ScanResult[]> = {};
@@ -60,6 +63,11 @@ export const useScanStore = create<ScanState>()(
             }
             scansMap[scan.roomId].push(scan);
           });
+
+          // Sort scans chronologically descending in memory
+          for (const roomId in scansMap) {
+            scansMap[roomId].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          }
           
           set({ scans: scansMap, loading: false });
         }, (error) => {
@@ -103,35 +111,64 @@ export const useScanStore = create<ScanState>()(
       },
 
       deleteScan: async (roomId, scanId) => {
+        // 1. Optimistically update local Zustand store and persistence so the UI removes the item immediately
+        set((state) => {
+          const newScans = { ...state.scans };
+          if (newScans[roomId]) {
+            newScans[roomId] = newScans[roomId].filter((s) => s.id !== scanId);
+            if (newScans[roomId].length === 0) {
+              delete newScans[roomId];
+            }
+          }
+          // Also verify across all rooms in case scan was assigned to another room ID
+          for (const rId of Object.keys(newScans)) {
+            newScans[rId] = newScans[rId].filter((s) => s.id !== scanId);
+            if (newScans[rId].length === 0) {
+              delete newScans[rId];
+            }
+          }
+          return { scans: newScans };
+        });
+
         try {
           const userId = auth.currentUser?.uid;
 
-          // Find any documents in firestore scans collection where the 'id' field matches the given scanId
-          const q = query(collection(db, 'scans'), where('id', '==', scanId));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            for (const document of querySnapshot.docs) {
-              await deleteDoc(doc(db, 'scans', document.id));
-            }
-          } else {
-            // Fallback: try deleting by the ID directly
+          // 2. Try direct document deletion
+          let docDeleted = false;
+          try {
             await deleteDoc(doc(db, 'scans', scanId));
+            docDeleted = true;
+          } catch (directErr: any) {
+            console.warn(`Direct delete for scans/${scanId} returned:`, directErr?.message);
+          }
+
+          // 3. Fallback: query in case document was stored with a different auto-ID
+          if (!docDeleted) {
+            try {
+              const q = query(collection(db, 'scans'), where('id', '==', scanId));
+              const querySnapshot = await getDocs(q);
+              for (const document of querySnapshot.docs) {
+                await deleteDoc(doc(db, 'scans', document.id));
+              }
+            } catch (queryErr: any) {
+              console.warn(`Query deletion for scans matching id=${scanId} returned:`, queryErr?.message);
+            }
           }
 
           if (userId) {
-            // 1. Clean up associated timelineEvents (by scanId)
-            const timelineQuery = query(
-              collection(db, 'timelineEvents'),
-              where('userId', '==', userId),
-              where('scanId', '==', scanId)
-            );
-            const timelineSnapshot = await getDocs(timelineQuery);
-            for (const document of timelineSnapshot.docs) {
-              await deleteDoc(doc(db, 'timelineEvents', document.id));
-            }
-
-            // Fallback check by link for timelineEvents (e.g., pre-existing or old scans without scanId)
+            // 4. Clean up associated timelineEvents (by scanId)
             try {
+              const timelineQuery = query(
+                collection(db, 'timelineEvents'),
+                where('userId', '==', userId),
+                where('scanId', '==', scanId)
+              );
+              const timelineSnapshot = await getDocs(timelineQuery);
+              for (const document of timelineSnapshot.docs) {
+                await deleteDoc(doc(db, 'timelineEvents', document.id));
+              }
+
+              // Fallback check by link for timelineEvents
               const allTimelineQuery = query(
                 collection(db, 'timelineEvents'),
                 where('userId', '==', userId)
@@ -144,22 +181,22 @@ export const useScanStore = create<ScanState>()(
                 }
               }
             } catch (e) {
-              console.warn('Error cleaning up timeline events by link:', e);
+              console.warn('Error cleaning up timeline events:', e);
             }
 
-            // 2. Clean up associated notifications (by scanId)
-            const notificationsQuery = query(
-              collection(db, 'notifications'),
-              where('userId', '==', userId),
-              where('scanId', '==', scanId)
-            );
-            const notificationsSnapshot = await getDocs(notificationsQuery);
-            for (const document of notificationsSnapshot.docs) {
-              await deleteDoc(doc(db, 'notifications', document.id));
-            }
-
-            // Fallback check by link for notifications
+            // 5. Clean up associated notifications (by scanId)
             try {
+              const notificationsQuery = query(
+                collection(db, 'notifications'),
+                where('userId', '==', userId),
+                where('scanId', '==', scanId)
+              );
+              const notificationsSnapshot = await getDocs(notificationsQuery);
+              for (const document of notificationsSnapshot.docs) {
+                await deleteDoc(doc(db, 'notifications', document.id));
+              }
+
+              // Fallback check by link for notifications
               const allNotificationsQuery = query(
                 collection(db, 'notifications'),
                 where('userId', '==', userId)
@@ -172,18 +209,22 @@ export const useScanStore = create<ScanState>()(
                 }
               }
             } catch (e) {
-              console.warn('Error cleaning up notifications by link:', e);
+              console.warn('Error cleaning up notifications:', e);
             }
 
-            // 3. Clean up associated activities (by scanId)
-            const activitiesQuery = query(
-              collection(db, 'activities'),
-              where('userId', '==', userId),
-              where('scanId', '==', scanId)
-            );
-            const activitiesSnapshot = await getDocs(activitiesQuery);
-            for (const document of activitiesSnapshot.docs) {
-              await deleteDoc(doc(db, 'activities', document.id));
+            // 6. Clean up associated activities (by scanId)
+            try {
+              const activitiesQuery = query(
+                collection(db, 'activities'),
+                where('userId', '==', userId),
+                where('scanId', '==', scanId)
+              );
+              const activitiesSnapshot = await getDocs(activitiesQuery);
+              for (const document of activitiesSnapshot.docs) {
+                await deleteDoc(doc(db, 'activities', document.id));
+              }
+            } catch (e) {
+              console.warn('Error cleaning up activities:', e);
             }
           }
         } catch (error) {
@@ -269,6 +310,54 @@ export const useScanStore = create<ScanState>()(
         } catch (error) {
           console.error('Error updating recommendation status:', error);
           return isCompletedNow;
+        }
+      },
+
+      updateHazardFeedback: async (scanId, hazardId, feedback) => {
+        const scan = get().getScanById(scanId);
+        if (!scan) return;
+
+        const reviewStatusMap = {
+          helpful: 'confirmed',
+          not_present: 'disputed',
+          needs_review: 'unresolved'
+        } as const;
+
+        const updatedHazards = (scan.hazards || []).map((h) => {
+          if (h.id === hazardId) {
+            return {
+              ...h,
+              feedback,
+              reviewStatus: reviewStatusMap[feedback],
+            };
+          }
+          return h;
+        });
+
+        const breakdown = getScoreFormulaBreakdown(updatedHazards);
+        const newSafetyScore = breakdown.calculatedScore;
+
+        const updatedScan = {
+          ...scan,
+          safetyScore: newSafetyScore,
+          hazards: updatedHazards,
+        };
+
+        set((state) => {
+          const newScans = { ...state.scans };
+          if (newScans[scan.roomId]) {
+            newScans[scan.roomId] = newScans[scan.roomId].map((s) => (s.id === scanId ? updatedScan : s));
+          }
+          return { scans: newScans };
+        });
+
+        try {
+          await updateDoc(doc(db, 'scans', scanId), cleanUndefined({
+            safetyScore: newSafetyScore,
+            hazards: updatedHazards,
+          }));
+        } catch (error) {
+          console.error('Error updating hazard feedback:', error);
         }
       },
     }),

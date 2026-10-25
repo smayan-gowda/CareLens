@@ -102,11 +102,11 @@ export function DashboardPage() {
             <Button
               variant="outline"
               size="lg"
-              onClick={() => navigate('/vault')}
-              className="bg-white/5 hover:bg-white/10 text-white border-white/15 backdrop-blur-md relative"
+              onClick={() => navigate('/library')}
+              className="bg-white/5 hover:bg-white/10 text-white border-white/15 backdrop-blur-md relative cursor-pointer"
             >
               <Smartphone className="mr-2 w-4 h-4 text-brand" /> 
-              <span>Photo Vault</span>
+              <span>Photo Library</span>
               {unscannedCount > 0 && (
                 <span className="ml-2 px-1.5 py-0.5 rounded-full text-[11px] font-semibold bg-brand text-brand-foreground">
                   {unscannedCount}

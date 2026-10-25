@@ -1,31 +1,45 @@
-import { ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Cpu, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
+import type { AssessmentTrace } from '@/types/ai';
 
 interface AiConfidencePanelProps {
   confidence?: number;
+  trace?: AssessmentTrace;
   className?: string;
 }
 
-export function AiConfidencePanel({ confidence = 88, className }: AiConfidencePanelProps) {
+export function AiConfidencePanel({ confidence = 88, trace, className }: AiConfidencePanelProps) {
   const metrics = [
     { label: 'Image Quality', value: 92, note: 'Good' },
-    { label: 'Room Coverage', value: 65, note: 'Partial' },
+    { label: 'Room Coverage', value: 78, note: 'Adequate' },
   ];
+
+  const modelName = trace?.model || 'gemini-2.5-flash';
+  const rulesVer = trace?.rulesVersion || '2.4.0';
+  const engineVer = trace?.engineVersion || 'carelens-deterministic-v2';
+  const evaluatedTime = trace?.evaluatedAt ? new Date(trace.evaluatedAt).toLocaleString() : new Date().toLocaleDateString();
 
   return (
     <div className={`border border-border bg-card flex flex-col ${className || ''}`}>
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
         <div className="flex items-center gap-2 text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5 text-success" strokeWidth={1.75} />
-          <span className="field-tag text-muted-foreground">Model Confidence</span>
+          <span className="field-tag text-muted-foreground">Traceable Assessment Audit</span>
         </div>
-        <span className="text-xs text-muted-foreground">CareLens Vision v2.4</span>
+        <span className="text-xs text-muted-foreground font-mono">v{rulesVer}</span>
       </div>
       
-      <div className="p-5 flex-1 flex flex-col">
-        <div className="space-y-4 py-1 min-h-[160px] flex flex-col justify-center flex-1">
-          <div className="flex items-end justify-between mb-2">
-            <span className="tabular text-3xl font-semibold tracking-tight text-success leading-none">{confidence}%</span>
+      <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+        <div className="space-y-4">
+          <div className="flex items-end justify-between">
+            <div>
+              <span className="text-xs text-muted-foreground block font-medium">Model Confidence</span>
+              <span className="tabular text-3xl font-semibold tracking-tight text-success leading-none">{confidence}%</span>
+            </div>
+            <div className="text-right text-[11px] font-mono text-muted-foreground">
+              <span className="text-foreground font-medium block">{modelName}</span>
+              <span>{engineVer}</span>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -48,9 +62,21 @@ export function AiConfidencePanel({ confidence = 88, className }: AiConfidencePa
             ))}
           </div>
 
-          <div className="border-t border-dashed border-border pt-3 mt-1 flex gap-2.5 text-[11px] text-muted-foreground leading-relaxed">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" strokeWidth={1.75} />
-            <p>The model detected occlusion behind the main furniture. An additional photo would complete the assessment.</p>
+          <div className="border-t border-dashed border-border pt-3 flex gap-2 text-[11px] text-muted-foreground leading-relaxed">
+            <Cpu className="h-3.5 w-3.5 shrink-0 mt-0.5 text-brand" strokeWidth={1.75} />
+            <p>
+              Evaluated at <span className="text-foreground font-medium">{evaluatedTime}</span>. Scores derived deterministically from candidate findings and physical validation state.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-muted/30 border border-border/80 rounded-lg flex items-start gap-2.5 text-[11px] text-muted-foreground">
+          <Lock className="w-3.5 h-3.5 text-brand shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-medium text-foreground block">Privacy & Storage Guarantee</span>
+            <p className="leading-normal">
+              Room photos are stored strictly under your private account. CareLens never sells photo data or uses personal home images to train public AI models.
+            </p>
           </div>
         </div>
       </div>

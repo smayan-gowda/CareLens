@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { UserCircle, Plus, Camera } from "lucide-react";
+import { UserCircle, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LensMark } from "@/components/brand/LensMark";
 import { NotificationCenter } from "@/components/layout/NotificationCenter";
@@ -8,12 +8,11 @@ import { useHomeStore } from "@/stores/useHomeStore";
 import { useStagingStore } from "@/stores/useStagingStore";
 
 const navItems = [
- { id: "01", label: "Overview", path: "/overview" },
- { id: "02", label: "Properties", path: "/properties" },
- { id: "03", label: "Photo Vault", path: "/vault" },
- { id: "04", label: "Assessments", path: "/assessments" },
- { id: "05", label: "Marketplace", path: "/marketplace" },
- { id: "06", label: "Network", path: "/network" },
+  { id: "01", label: "Overview", path: "/overview" },
+  { id: "02", label: "Properties", path: "/properties" },
+  { id: "03", label: "Photo Library", path: "/library" },
+  { id: "04", label: "Assessments", path: "/assessments" },
+  { id: "05", label: "Marketplace", path: "/marketplace" },
 ];
 
 /**
@@ -24,82 +23,82 @@ const navItems = [
  * mark, so even the chrome reminds them this is their house, not a tool.
  */
 function LedgerBar() {
- const location = useLocation();
- const navigate = useNavigate();
- const { homes } = useHomeStore();
- const { photos } = useStagingStore();
- const unscannedCount = photos.filter(p => p.status === 'unscanned').length;
- const primaryHome = homes[0];
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { homes } = useHomeStore();
+  const { photos } = useStagingStore();
+  const unscannedCount = photos.filter(p => p.status === 'unscanned').length;
+  const primaryHome = homes[0];
 
- return (
- <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border">
- <div className="max-w-[1400px] mx-auto px-4 md:px-8">
- <div className="h-16 flex items-center justify-between gap-4">
- <button onClick={() => navigate("/overview")} className="flex items-center gap-3 shrink-0" aria-label="CareLens home">
- <LensMark className="w-5 h-5 text-brand" />
- <span className="hidden sm:block text-sm font-semibold tracking-tight">CARELENS</span>
- {primaryHome && (
- <span className="hidden md:flex items-center gap-2 pl-3 ml-1 border-l border-border">
- <span className="w-6 h-6 overflow-hidden bg-muted shrink-0">
- {primaryHome.coverImage ? (
- <img src={primaryHome.coverImage} className="w-full h-full object-cover" alt="" />
- ) : null}
- </span>
- <span className="text-[13px] text-muted-foreground truncate max-w-[140px]">{primaryHome.name}</span>
- </span>
- )}
- </button>
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border">
+      <div className="max-w-[1400px] mx-auto px-4 md:px-8">
+        <div className="h-16 flex items-center justify-between gap-4">
+          <button onClick={() => navigate("/overview")} className="flex items-center gap-3 shrink-0" aria-label="CareLens home">
+            <LensMark className="w-5 h-5 text-brand" />
+            <span className="hidden sm:block text-sm font-semibold tracking-tight">CARELENS</span>
+            {primaryHome && (
+              <span className="hidden md:flex items-center gap-2 pl-3 ml-1 border-l border-border">
+                <span className="w-6 h-6 overflow-hidden bg-muted shrink-0">
+                  {primaryHome.coverImage ? (
+                    <img src={primaryHome.coverImage} className="w-full h-full object-cover" alt="" />
+                  ) : null}
+                </span>
+                <span className="text-[13px] text-muted-foreground truncate max-w-[140px]">{primaryHome.name}</span>
+              </span>
+            )}
+          </button>
 
- <nav aria-label="Primary" className="hidden md:flex items-stretch h-16 flex-1 justify-center">
- {navItems.map((item) => {
- const isActive = location.pathname.startsWith(item.path);
- return (
- <button
- key={item.id}
- onClick={() => navigate(item.path)}
- className="relative flex items-center gap-2 px-5 h-full group"
- >
- <span className={cn("tabular text-[11px] transition-colors", isActive ? "text-brand" : "text-muted-foreground/40 group-hover:text-muted-foreground")}>
- {item.id}
- </span>
- <span className={cn("text-[13px] font-medium tracking-tight transition-colors flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")}>
- {item.label}
- {item.path === '/vault' && unscannedCount > 0 && (
- <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
- )}
- </span>
- {isActive && (
- <motion.span
- layoutId="ledger-tick"
- className="absolute bottom-0 left-3 right-3 h-[2px] bg-brand"
- transition={{ type: "spring", stiffness: 500, damping: 40 }}
- />
- )}
- </button>
- );
- })}
- </nav>
+          <nav aria-label="Primary" className="hidden md:flex items-stretch h-16 flex-1 justify-center">
+            {navItems.map((item) => {
+              const isActive = location.pathname.startsWith(item.path);
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(item.path)}
+                  className="relative flex items-center gap-2 px-5 h-full group"
+                >
+                  <span className={cn("tabular text-[11px] transition-colors", isActive ? "text-brand" : "text-muted-foreground/40 group-hover:text-muted-foreground")}>
+                    {item.id}
+                  </span>
+                  <span className={cn("text-[13px] font-medium tracking-tight transition-colors flex items-center gap-1.5", isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground")}>
+                    {item.label}
+                    {(item.path === '/library' || item.path === '/vault') && unscannedCount > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    )}
+                  </span>
+                  {isActive && (
+                    <motion.span
+                      layoutId="ledger-tick"
+                      className="absolute bottom-0 left-3 right-3 h-[2px] bg-brand"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
 
- <div className="flex items-center gap-2 shrink-0">
- <button
- onClick={() => navigate("/scan")}
- className="hidden sm:flex items-center gap-1.5 h-9 pl-3 pr-3.5 rounded-md bg-brand text-brand-foreground text-[13px] font-medium hover:brightness-105 transition-[filter,transform] active:scale-[0.97]"
- >
- <Plus className="w-3.5 h-3.5" strokeWidth={2.25} /> Scan
- </button>
- <NotificationCenter />
- <button
- onClick={() => navigate("/profile")}
- aria-label="Profile"
- className="w-9 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
- >
- <UserCircle className="w-[18px] h-[18px]" strokeWidth={1.6} />
- </button>
- </div>
- </div>
- </div>
- </header>
- );
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => navigate("/scan")}
+              className="hidden sm:flex items-center gap-1.5 h-9 pl-3 pr-3.5 rounded-md bg-brand text-brand-foreground text-[13px] font-medium hover:brightness-105 transition-[filter,transform] active:scale-[0.97]"
+            >
+              <Plus className="w-3.5 h-3.5" strokeWidth={2.25} /> Scan
+            </button>
+            <NotificationCenter />
+            <button
+              onClick={() => navigate("/profile")}
+              aria-label="Profile"
+              className="w-9 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <UserCircle className="w-[18px] h-[18px]" strokeWidth={1.6} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
 }
 
 /** Mobile station strip — same numbering system, condensed to icon-free text. */

@@ -61,6 +61,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     await signOut(auth);
+    try {
+      localStorage.removeItem('scan-storage');
+      localStorage.removeItem('home-storage');
+    } catch (e) {
+      console.warn('Error clearing storage on logout:', e);
+    }
     set({ user: null, profile: null });
   },
 

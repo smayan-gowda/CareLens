@@ -462,11 +462,11 @@ export function SettingsPage() {
 
             {activeTab === 'privacy' && (
               <motion.div key="privacy" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
-                <SectionPanel title="How your data is handled" description="A plain explanation, not a legal document.">
-                  <PrivacyPoint icon={ImageIcon} title="Your photos" copy="Room photos are used only to generate your safety reports. They're never shared, sold, or used to train models without separate, explicit permission." />
-                  <PrivacyPoint icon={Cpu} title="AI processing" copy="Images are analyzed securely and the results are attached to your account. Processing happens over an encrypted connection." />
-                  <PrivacyPoint icon={Cloud} title="Cloud sync" copy="Your homes, scans, and reports sync automatically so they're available on any device you sign into." />
-                  <PrivacyPoint icon={Lock} title="Encryption" copy="Data is encrypted in transit and at rest. Only you — and anyone you explicitly invite — can view your reports." />
+                <SectionPanel title="How your data is handled" description="Honest, plain-language architecture disclosures.">
+                  <PrivacyPoint icon={ImageIcon} title="Your room photos" copy="Room photos are uploaded to your personal Cloud Firestore and Storage account. They are used exclusively to generate your safety assessments and are never sold or shared." />
+                  <PrivacyPoint icon={Cpu} title="Vision AI processing" copy="Photos are transmitted over secure HTTPS through our server proxy to Google Gemini Vision for preliminary hazard detection. Images are not retained for external model training." />
+                  <PrivacyPoint icon={Cloud} title="Cloud persistence" copy="Your properties, room photos, and safety assessments are stored under your authenticated account ID in Google Cloud Firestore so you can access them across desktop and mobile." />
+                  <PrivacyPoint icon={Lock} title="Data security & deletion" copy="All communications use TLS/HTTPS encryption in transit. You retain full control to edit or permanently delete photos and reports from your account at any time." />
                 </SectionPanel>
 
                 <SectionPanel title="Sharing preferences">

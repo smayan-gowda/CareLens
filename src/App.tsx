@@ -21,7 +21,6 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { ReportPage } from "./pages/ReportPage";
 import { ResourcesPage } from "./pages/ResourcesPage";
 import { TimelinePage } from "./pages/TimelinePage";
-import { CommunityPage } from "./pages/CommunityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -79,14 +78,19 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/welcome" element={<OnboardingPage />} />
             <Route path="/vault/mobile" element={<MobileUploadPage />} />
+            <Route path="/library/mobile" element={<MobileUploadPage />} />
 
             <Route element={<AppLayout />}>
               <Route path="/overview" element={<DashboardPage />} />
               <Route path="/scan" element={<ScanPage />} />
-              <Route path="/vault" element={<PhotoVaultPage />} />
-              <Route path="/staging" element={<Navigate to="/vault" replace />} />
+              <Route path="/library" element={<PhotoVaultPage />} />
+              <Route path="/vault" element={<Navigate to="/library" replace />} />
+              <Route path="/photos" element={<Navigate to="/library" replace />} />
+              <Route path="/staging" element={<Navigate to="/library" replace />} />
               <Route path="/properties/:homeId/rooms/:roomId/scan" element={<ScanPage />} />
               <Route path="/properties/:homeId/rooms/:roomId/assessments/:reportId" element={<ReportPage />} />
+              <Route path="/assessments/:reportId" element={<ReportPage />} />
+              <Route path="/reports/:reportId" element={<ReportPage />} />
               <Route path="/properties" element={<HomesPage />} />
               <Route path="/properties/new" element={<HomeCreatePage />} />
               <Route path="/properties/:homeId" element={<HomeProfilePage />} />
@@ -95,7 +99,6 @@ export default function App() {
               <Route path="/assessments" element={<ReportsPage />} />
               <Route path="/progress" element={<TimelinePage />} />
               <Route path="/marketplace" element={<ResourcesPage />} />
-              <Route path="/network" element={<CommunityPage />} />
               <Route path="/profile" element={<SettingsPage />} />
               <Route path="/dashboard" element={<Navigate to="/overview" replace />} />
               <Route path="/homes" element={<Navigate to="/properties" replace />} />

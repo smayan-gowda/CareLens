@@ -7,56 +7,7 @@ import { HfInference } from "@huggingface/inference";
 import { WebSocketServer } from "ws";
 import { ROOM_ANALYSIS_PROMPT } from "./src/services/ai/prompts";
 
-async function safeGenerateContent(ai: GoogleGenAI, params: any) {
-  const modelsToTry = [
-    "gemma-4-31b-it",
-    "gemini-flash-latest",
-    "gemini-3.6-flash",
-    "gemini-2.0-flash"
-  ];
-
-  let lastError: any = null;
-  for (const modelName of modelsToTry) {
-    try {
-      return await ai.models.generateContent({
-        ...params,
-        model: modelName
-      });
-    } catch (err: any) {
-      console.warn(`[AI Model Fallback] Model ${modelName} failed or quota reached:`, err?.message || err);
-      lastError = err;
-    }
-  }
-  throw lastError;
-}
-
-async function safeTranscribeAudio(ai: GoogleGenAI, wavBase64: string, promptText: string): Promise<string> {
-  const audioModels = [
-    "gemini-flash-latest",
-    "gemini-3.6-flash",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash"
-  ];
-
-  for (const modelName of audioModels) {
-    try {
-      const res = await ai.models.generateContent({
-        model: modelName,
-        contents: [
-          { inlineData: { mimeType: "audio/wav", data: wavBase64 } },
-          { text: promptText }
-        ]
-      });
-      const text = res.text?.trim();
-      if (text && !text.toLowerCase().includes("[silence]") && !text.toLowerCase().includes("[no speech]")) {
-        return text;
-      }
-    } catch (err: any) {
-      console.warn(`[Audio Transcribe] Model ${modelName} failed:`, err?.message || err);
-    }
-  }
-  return "";
-}
+import { safeGenerateContent, safeTranscribeAudio } from "./src/services/ai/aiUtils";
 
 function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
   const normalizedType = (roomType || "Bathroom").trim().toLowerCase();
@@ -578,17 +529,175 @@ async function startServer() {
     res.send(img.buffer);
   });
 
+  // Test API Key endpoint for free Gemini and Hugging Face keys
+  app.post("/api/test-key", async (req, res) => {
+    const { provider, apiKey } = req.body;
+    if (!apiKey || typeof apiKey !== "string") {
+      return res.status(400).json({ ok: false, error: "API key is required." });
+    }
+
+    const trimmedKey = apiKey.trim();
+    const startTime = Date.now();
+
+    if (provider === "gemini") {
+      try {
+        const testAi = new GoogleGenAI({
+          apiKey: trimmedKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            }
+          }
+        });
+        const response = await testAi.models.generateContent({
+          model: "gemini-3.8-flash",
+          contents: "Respond with the word: READY",
+        });
+        const latencyMs = Date.now() - startTime;
+        return res.json({
+          ok: true,
+          provider: "gemini",
+          model: "gemini-3.8-flash",
+          latencyMs,
+          sampleOutput: response.text?.slice(0, 50) || "READY"
+        });
+      } catch (err: any) {
+        console.error("[Test Key Gemini Error]:", err);
+        let errMsg = err.message || "Failed to validate Gemini API key.";
+        if (err?.status === 400 || errMsg.includes("API key not valid")) {
+          errMsg = "Invalid API key. Please copy a free key from Google AI Studio (aistudio.google.com/app/apikey).";
+        } else if (err?.status === 429 || errMsg.includes("quota")) {
+          errMsg = "Rate limit reached on this free key. Please retry in a few moments.";
+        }
+        return res.status(400).json({
+          ok: false,
+          error: errMsg
+        });
+      }
+    } else if (provider === "huggingface") {
+      try {
+        const hfRes = await fetch("https://huggingface.co/api/whoami-v2", {
+          headers: {
+            "Authorization": `Bearer ${trimmedKey}`
+          }
+        });
+        const latencyMs = Date.now() - startTime;
+        if (!hfRes.ok) {
+          return res.status(400).json({
+            ok: false,
+            error: "Invalid Hugging Face token. Please check that you copied a valid 'Read' token from huggingface.co/settings/tokens."
+          });
+        }
+        const data = await hfRes.json();
+        return res.json({
+          ok: true,
+          provider: "huggingface",
+          username: data.name || data.fullname || "Hugging Face User",
+          latencyMs
+        });
+      } catch (err: any) {
+        console.error("[Test Key HF Error]:", err);
+        return res.status(400).json({
+          ok: false,
+          error: err.message || "Could not reach Hugging Face API."
+        });
+      }
+    } else {
+      return res.status(400).json({ ok: false, error: "Unsupported provider. Choose 'gemini' or 'huggingface'." });
+    }
+  });
+
+  // Estimate Monocular Depth using Hugging Face Depth Anything V2 or Geometric Fallback
+  app.post("/api/estimate-depth", async (req, res) => {
+    try {
+      const { imageBase64 } = req.body;
+      if (!imageBase64) {
+        return res.status(400).json({ error: "Missing imageBase64" });
+      }
+
+      const customHfKey = (req.headers["x-custom-hf-key"] as string) || (req.body?.customHfKey as string) || process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+
+      let pureBase64 = imageBase64;
+      let mimeType = "image/jpeg";
+      if (imageBase64.startsWith("data:")) {
+        const parts = imageBase64.split(",");
+        pureBase64 = parts[1];
+        mimeType = parts[0].split(":")[1].split(";")[0];
+      } else if (imageBase64.startsWith("http")) {
+        const imgRes = await fetch(imageBase64);
+        const buffer = await imgRes.arrayBuffer();
+        pureBase64 = Buffer.from(buffer).toString("base64");
+        mimeType = imgRes.headers.get("content-type") || "image/jpeg";
+      }
+
+      const imageBuffer = Buffer.from(pureBase64, "base64");
+      const imageBlob = new Blob([imageBuffer], { type: mimeType });
+
+      if (customHfKey) {
+        try {
+          console.log("[Depth Anything V2] Requesting depth map from Hugging Face...");
+          const hf = new HfInference(customHfKey.trim());
+          
+          const depthBlob: any = await hf.imageToImage({
+            model: "depth-anything/Depth-Anything-V2-Small-hf",
+            inputs: imageBlob
+          });
+
+          if (depthBlob) {
+            const depthArrayBuf = await depthBlob.arrayBuffer();
+            const depthBase64 = Buffer.from(depthArrayBuf).toString("base64");
+            return res.json({
+              ok: true,
+              depthMapUrl: `data:image/png;base64,${depthBase64}`,
+              engine: "Depth Anything V2 (Hugging Face)",
+              calibrated: true
+            });
+          }
+        } catch (hfErr: any) {
+          console.warn("[Depth Anything V2 HF Inference Warning]:", hfErr?.message || hfErr);
+        }
+      }
+
+      return res.json({
+        ok: true,
+        engine: "Perspective Depth Sensor (Geometric Fallback)",
+        depthMapUrl: null,
+        calibrated: false,
+        message: customHfKey 
+          ? "Depth Anything V2 model is loading or busy; perspective estimation active." 
+          : "Provide a free Hugging Face token in AI Engine Settings to activate dense neural depth maps."
+      });
+    } catch (err: any) {
+      console.error("[Estimate Depth Error]:", err);
+      res.status(500).json({ error: err.message || "Failed to compute depth estimation." });
+    }
+  });
+
   // AI Route
   app.post("/api/analyze-room", async (req, res) => {
     try {
       const { imageBase64, imagesBase64, roomType } = req.body;
       
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ error: "Gemini API key is not configured on the server." });
+      const imagesToProcess = imagesBase64 && Array.isArray(imagesBase64) && imagesBase64.length > 0 
+        ? imagesBase64 
+        : [imageBase64];
+      
+      const totalSize = imagesToProcess.reduce((sum: number, img: string) => sum + (img?.length || 0), 0);
+      if (totalSize > 30 * 1024 * 1024) { 
+        return res.status(400).json({ error: "Image payload too large. Please use smaller images." });
+      }
+
+      const customKey = (req.headers["x-custom-gemini-key"] as string) || (req.body?.customGeminiKey as string);
+      const effectiveKey = (customKey && customKey.trim().length > 0) ? customKey.trim() : process.env.GEMINI_API_KEY;
+
+      if (!effectiveKey) {
+        return res.status(500).json({ 
+          error: "No Gemini API key configured. Please enter your free API key from Google AI Studio (aistudio.google.com/app/apikey) in the AI Engine settings." 
+        });
       }
 
       const ai = new GoogleGenAI({ 
-        apiKey: process.env.GEMINI_API_KEY,
+        apiKey: effectiveKey,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -597,9 +706,6 @@ async function startServer() {
       });
       
       const parts: any[] = [];
-      const imagesToProcess = imagesBase64 && Array.isArray(imagesBase64) && imagesBase64.length > 0 
-        ? imagesBase64 
-        : [imageBase64];
 
       for (const imgBase64 of imagesToProcess) {
         let pureBase64 = imgBase64;
@@ -685,6 +791,11 @@ async function startServer() {
                     category: { type: Type.STRING },
                     severity: { type: Type.STRING, description: "Critical, High, Medium, or Low" },
                     description: { type: Type.STRING },
+                    visibleObservation: { type: Type.STRING, description: "Exact visual marker or feature directly observed in the photo" },
+                    potentialConcern: { type: Type.STRING, description: "Physical safety or accessibility risk for an older adult" },
+                    verificationRequirement: { type: Type.STRING, description: "Manual in-person physical check or measurement required" },
+                    limitations: { type: Type.STRING, description: "Non-assessable factor from 2D photo alone" },
+                    suggestedNextStep: { type: Type.STRING, description: "Actionable next step for caregiver or inspector" },
                     location: { type: Type.STRING },
                     confidence: { type: Type.NUMBER },
                     objectsInvolved: { type: Type.ARRAY, items: { type: Type.STRING } },
@@ -746,9 +857,19 @@ async function startServer() {
       }
       
     } catch (error: any) {
-      console.error("Gemini API error:", error);
-      res.status(429).json({ 
-        error: "API rate limit exceeded. The free tier allows 5 requests per minute. Please wait 60 seconds and try again." 
+      console.error("Gemini API error in /api/analyze-room:", error);
+      const isRateLimit =
+        error?.status === 429 ||
+        error?.message?.toLowerCase().includes("quota") ||
+        error?.message?.toLowerCase().includes("rate limit") ||
+        error?.message?.includes("RESOURCE_EXHAUSTED");
+      if (isRateLimit) {
+        return res.status(429).json({
+          error: "API rate limit reached. The service allows 5 requests per minute. Please wait 60 seconds and try again."
+        });
+      }
+      res.status(500).json({ 
+        error: error?.message || "Failed to analyze room image. Please try again or select another angle." 
       });
     }
   });
@@ -1078,6 +1199,11 @@ Return a JSON object containing:
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  
+  // Increase server timeout to 5 minutes to handle long AI analysis tasks
+  server.timeout = 300000;
+  server.keepAliveTimeout = 301000;
+  server.headersTimeout = 302000;
 
   // Helper to convert raw PCM samples into a standard WAV buffer for Gemini API
   function pcmToWavBuffer(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
@@ -1155,13 +1281,15 @@ Return a JSON object containing:
       let session: any;
       try {
         session = await ai.live.connect({
-          model: "gemini-3.1-flash-live-preview",
+          model: "gemini-3.8-live",
           config: {
             responseModalities: [Modality.AUDIO],
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             speechConfig: {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
             },
-            systemInstruction: "You are CareLens, an empathetic and highly observant Occupational Therapist. The user is walking around their home showing you the environment through their camera. Guide them gently, ask them to pan or look closer if needed, and point out potential safety hazards for elderly individuals (e.g., loose rugs, raised thresholds, poor lighting, lack of grab bars). Keep your responses concise (1-2 sentences) and supportive.",
+            systemInstruction: "You are CareLens, an empathetic and highly observant Occupational Therapist. The user is walking around their home showing you the environment through their camera and speaking to you through their microphone. ALWAYS answer promptly and conversationally out loud whenever the user speaks or asks a question. Guide them gently, point out potential safety hazards for elderly individuals (e.g., loose rugs, raised thresholds, poor lighting, lack of grab bars), and keep your responses concise (1-2 sentences), warm, and supportive.",
           },
           callbacks: {
             onmessage: (message: LiveServerMessage) => {
@@ -1201,11 +1329,13 @@ Return a JSON object containing:
           },
         });
       } catch (primaryErr) {
-        console.warn("Primary live model failed, trying fallback gemini-2.5-flash-native-audio-latest...", primaryErr);
+        console.warn("Primary live model failed, trying fallback gemini-3.8-live-extended-thinking...", primaryErr);
         session = await ai.live.connect({
-          model: "gemini-2.5-flash-native-audio-latest",
+          model: "gemini-3.8-live-extended-thinking",
           config: {
             responseModalities: [Modality.AUDIO],
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             speechConfig: {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
             },
@@ -1284,8 +1414,10 @@ Return a JSON object containing:
           }
 
           if (parsed.text) {
-            // Send echo back to client for transcript/UI acknowledgement
-            clientWs.send(JSON.stringify({ text: parsed.text, isUser: true }));
+            // Only echo back to client for transcript if it was not already logged on the client
+            if (!parsed.isUserSpeech) {
+              clientWs.send(JSON.stringify({ text: parsed.text, isUser: true }));
+            }
             
             try {
               session.sendRealtimeInput({ text: parsed.text });

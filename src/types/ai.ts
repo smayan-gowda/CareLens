@@ -21,6 +21,14 @@ export interface BoundingBox {
   height: number;
 }
 
+export interface AssessmentTrace {
+  model: string;
+  rulesVersion: string;
+  evaluatedAt: string;
+  imageId?: string;
+  engineVersion: string;
+}
+
 export interface Hazard {
   id: string;
   title: string;
@@ -28,12 +36,21 @@ export interface Hazard {
   severity: HazardSeverity;
   confidence: number;
   description: string;
+  visibleObservation?: string;
+  potentialConcern?: string;
+  verificationRequirement?: string;
+  limitations?: string;
+  suggestedNextStep?: string;
   location: string;
   impact: string;
   objectsInvolved?: string[];
   reasoning?: string;
   boundingBox?: BoundingBox; // Normalized coordinates 0-100
   imageId?: string;
+  feedback?: 'helpful' | 'not_present' | 'needs_review';
+  reviewStatus?: 'unresolved' | 'confirmed' | 'disputed';
+  humanVerificationNote?: string;
+  suggestedAction?: string;
 }
 
 export interface Recommendation {
@@ -86,4 +103,5 @@ export interface ScanResult {
   detectedObjects?: DetectedObject[];
   hazards: Hazard[];
   recommendations: Recommendation[];
+  assessmentTrace?: AssessmentTrace;
 }

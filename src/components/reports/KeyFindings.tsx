@@ -1,8 +1,35 @@
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Info, ChevronDown, DollarSign, Wrench, Check } from "lucide-react";
+import { 
+  Crosshair, 
+  Info, 
+  ChevronDown, 
+  Wrench, 
+  Check, 
+  Eye, 
+  HelpCircle, 
+  ThumbsUp, 
+  XCircle, 
+  AlertCircle,
+  ShieldCheck,
+  UserCheck
+} from "lucide-react";
 import type { Hazard, Recommendation, DetectedObject } from "@/types/ai";
 import { severityColor, severityLabel, estimatedImprovement } from "./reportMath";
+
+function getEvidenceStateBadge(hazard: Hazard): { label: string; style: string } {
+  const state = hazard.feedback === "needs_review" ? "Needs Review" : hazard.boundingBox ? "Geometrically Supported" : "Observed";
+  switch (state) {
+    case "Observed":
+      return { label: "Observed", style: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20" };
+    case "Geometrically Supported":
+      return { label: "Geometrically Supported", style: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" };
+    case "Needs Review":
+    default:
+      return { label: "Needs Review / Ambiguous", style: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20" };
+  }
+}
 
 interface KeyFindingsProps {
   hazards: Hazard[];
@@ -11,6 +38,7 @@ interface KeyFindingsProps {
   selectedHazardId: string | null;
   onSelectHazard: (id: string | null) => void;
   detectedObjects?: DetectedObject[];
+  onFeedbackChange?: (hazardId: string, feedback: "helpful" | "not_present" | "needs_review") => void;
 }
 
 function resolveHazardBox(hazard: any, detectedObjects: any[] = []): any {
@@ -47,18 +75,14 @@ function resolveHazardBox(hazard: any, detectedObjects: any[] = []): any {
   return null;
 }
 
-/** A zoomed, cropped read of the source photo centered on a hazard's
- * bounding box — a real crop of the real image, not a placeholder. Falls
- * back to the full frame when no box is available. */
 function FindingImage({ image, box }: { image?: string; box?: Hazard["boundingBox"] }) {
   if (!image) {
     return <div className="w-full h-full bg-muted" />;
   }
   if (!box) {
-    return <img src={image} className="w-full h-full object-cover" alt="" />;
+    return <img src={image} className="w-full h-full object-cover" alt="Full room view" />;
   }
-  
-  // Safe normalization inline
+
   let normBox = { ...box };
   if (normBox.x <= 1 && normBox.y <= 1 && normBox.width <= 1 && normBox.height <= 1 && normBox.width > 0) {
     normBox = { x: normBox.x * 100, y: normBox.y * 100, width: normBox.width * 100, height: normBox.height * 100 };
@@ -74,73 +98,189 @@ function FindingImage({ image, box }: { image?: string; box?: Hazard["boundingBo
       src={image}
       className="w-full h-full object-cover"
       style={{ transform: `scale(${zoom})`, transformOrigin: `${cx}% ${cy}%` }}
-      alt=""
+      alt="Cropped detail of detected concern"
     />
   );
 }
 
-export function KeyFindings({ hazards, recommendations, image, selectedHazardId, onSelectHazard, detectedObjects = [] }: KeyFindingsProps) {
+export function KeyFindings({
+  hazards,
+  recommendations,
+  image,
+  selectedHazardId,
+  onSelectHazard,
+  detectedObjects = [],
+  onFeedbackChange,
+}: KeyFindingsProps) {
   if (hazards.length === 0) {
     return (
-      <div id="findings" className="scroll-mt-24 border-t border-b border-border py-16 text-center">
-        <Check className="h-6 w-6 text-success mx-auto mb-4" strokeWidth={1.5} />
-        <h3 className="font-medium tracking-tight">No hazards detected</h3>
-        <p className="text-muted-foreground mt-1.5 text-sm">This room appears well-configured for safety.</p>
+      <div id="findings" className="scroll-mt-24 border-t border-b border-border py-16 text-center space-y-3">
+        <Check className="h-7 w-7 text-success mx-auto" strokeWidth={2} />
+        <h3 className="text-xl font-medium tracking-tight">No visible concerns detected</h3>
+        <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">
+          The submitted photograph does not show obvious visible tripping hazards or clear pathway obstructions.
+          Always conduct an in-person walkthrough to test stability, floor grip, and lighting at different times of day.
+        </p>
       </div>
     );
   }
 
   return (
-    <div id="findings" className="scroll-mt-24">
-      <span className="field-tag text-muted-foreground block mb-3">Key Findings</span>
+    <div id="findings" className="scroll-mt-24 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <span className="field-tag text-muted-foreground block mb-1">Detailed Inspection</span>
+          <h2 className="text-2xl font-semibold tracking-tight">Observed Concerns & Practical Checks</h2>
+        </div>
+        <span className="text-xs text-muted-foreground tabular">
+          {hazards.length} item{hazards.length !== 1 ? "s" : ""} identified
+        </span>
+      </div>
+
+      {/* Preliminary guidance banner */}
+      <div className="p-4 bg-muted/30 border border-border rounded-xl flex items-start gap-3 text-xs text-muted-foreground">
+        <ShieldCheck className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">Preliminary Guidance Notice</p>
+          <p className="leading-relaxed">
+            These findings highlight visible elements that may pose safety or accessibility concerns. A 2D photograph
+            cannot confirm physical properties such as grab bar weight capacity, floor slip-resistance when wet, or
+            carpet adhesion. Use these findings as discussion points with an occupational therapist or licensed professional.
+          </p>
+        </div>
+      </div>
+
       <div className="border-t border-border">
         {hazards.map((hazard, idx) => {
           const isExpanded = selectedHazardId === hazard.id;
           const improvement = estimatedImprovement(hazard, recommendations);
           const resolvedBox = resolveHazardBox(hazard, detectedObjects);
+          const feedback = hazard.feedback;
+          const isNotPresent = feedback === "not_present";
+
           return (
             <motion.div
               key={hazard.id}
               layout
-              className="border-b border-border py-8 md:py-10"
+              className={`border-b border-border py-8 md:py-10 transition-colors ${
+                isNotPresent ? "opacity-60 bg-muted/15" : ""
+              }`}
             >
-              <div
-                className="grid md:grid-cols-12 gap-6 md:gap-10 cursor-pointer"
-                onClick={() => onSelectHazard(isExpanded ? null : hazard.id)}
-              >
-                <div className="md:col-span-4">
-                  <div className="aspect-[4/3] w-full overflow-hidden bg-neutral-900">
+              <div className="grid md:grid-cols-12 gap-6 md:gap-10">
+                {/* Image detail */}
+                <div
+                  className="md:col-span-4 cursor-pointer"
+                  onClick={() => onSelectHazard(isExpanded ? null : hazard.id)}
+                >
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-neutral-900 rounded-lg border border-border/80 relative">
                     <FindingImage image={image} box={resolvedBox} />
+                    {resolvedBox && (
+                      <span className="absolute bottom-2 right-2 text-[10px] font-mono bg-black/70 text-white/90 px-2 py-0.5 rounded backdrop-blur-sm">
+                        Area Annotated
+                      </span>
+                    )}
                   </div>
                 </div>
 
+                {/* Finding Details */}
                 <div className="md:col-span-8 flex flex-col">
-                  <div className="flex items-start justify-between gap-4">
+                  <div
+                    className="flex items-start justify-between gap-4 cursor-pointer"
+                    onClick={() => onSelectHazard(isExpanded ? null : hazard.id)}
+                  >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2.5 mb-2 flex-wrap">
-                        <span className="tabular text-brand text-sm">{String(idx + 1).padStart(2, "0")}</span>
-                        <span className={`field-tag ${severityColor(hazard.severity)}`}>{severityLabel(hazard.severity)}</span>
+                        <span className="tabular text-brand text-sm font-mono">
+                          {String(idx + 1).padStart(2, "0")}
+                        </span>
+                        <span className={`field-tag ${severityColor(hazard.severity)} font-medium`}>
+                          {severityLabel(hazard.severity)}
+                        </span>
                         <span className="w-1 h-1 rounded-full bg-border" />
                         <span className="field-tag text-muted-foreground">{hazard.category}</span>
+
+                        {isNotPresent && (
+                          <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                            Marked as Not Present
+                          </span>
+                        )}
                       </div>
-                      <h3 className="text-2xl font-semibold tracking-tight">{hazard.title}</h3>
+                      <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-balance">
+                        {hazard.title}
+                      </h3>
                     </div>
-                    <button className="shrink-0 text-muted-foreground p-1 mt-1">
+                    <button
+                      aria-label="Toggle details"
+                      className="shrink-0 text-muted-foreground p-1 mt-1 hover:text-foreground transition-colors cursor-pointer"
+                    >
                       <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.3 }}>
                         <ChevronDown className="h-4 w-4" />
                       </motion.div>
                     </button>
                   </div>
 
-                  <p className="text-muted-foreground leading-relaxed mt-4 max-w-2xl">{hazard.description}</p>
+                  {/* Summary prose */}
+                  <p className="text-muted-foreground leading-relaxed mt-3 max-w-2xl text-sm md:text-base">
+                    {hazard.description}
+                  </p>
 
-                  <div className="flex flex-wrap items-center gap-x-8 gap-y-2 mt-5 text-sm">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Crosshair className="h-3.5 w-3.5" /> {hazard.confidence}% confidence
-                    </span>
-                    <span className="text-success font-medium">+{improvement} pts if resolved</span>
+                  {/* Location & Impact Bar */}
+                  <div className="grid sm:grid-cols-2 gap-3 mt-4 p-3 bg-muted/20 border border-border/60 rounded-lg text-xs">
+                    <div>
+                      <span className="text-muted-foreground font-medium">Where: </span>
+                      <span className="text-foreground">{hazard.location}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground font-medium">Potential Concern: </span>
+                      <span className="text-foreground">{hazard.potentialConcern || hazard.impact}</span>
+                    </div>
                   </div>
 
+                  {/* Human feedback controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-border/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium mr-1">User review:</span>
+                      <Button
+                        size="sm"
+                        variant={feedback === "helpful" ? "secondary" : "outline"}
+                        className={`h-7 px-2.5 text-xs gap-1.5 cursor-pointer ${
+                          feedback === "helpful" ? "border-brand/40 text-brand bg-brand/10 font-medium" : ""
+                        }`}
+                        onClick={() => onFeedbackChange?.(hazard.id, "helpful")}
+                      >
+                        <ThumbsUp className="w-3 h-3" />
+                        <span>Confirmed</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={feedback === "not_present" ? "secondary" : "outline"}
+                        className={`h-7 px-2.5 text-xs gap-1.5 cursor-pointer ${
+                          feedback === "not_present" ? "border-destructive/40 text-destructive bg-destructive/10 font-medium" : ""
+                        }`}
+                        onClick={() => onFeedbackChange?.(hazard.id, "not_present")}
+                      >
+                        <XCircle className="w-3 h-3" />
+                        <span>Disputed (Not Present)</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={feedback === "needs_review" ? "secondary" : "outline"}
+                        className={`h-7 px-2.5 text-xs gap-1.5 cursor-pointer ${
+                          feedback === "needs_review" ? "border-warning/40 text-warning bg-warning/10 font-medium" : ""
+                        }`}
+                        onClick={() => onFeedbackChange?.(hazard.id, "needs_review")}
+                      >
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Unresolved</span>
+                      </Button>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      <span className="text-success font-medium">+{improvement} pts</span> if addressed
+                    </div>
+                  </div>
+
+                  {/* Expanded evidence and physical verification notes */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
@@ -150,43 +290,66 @@ export function KeyFindings({ hazards, recommendations, image, selectedHazardId,
                         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                         className="overflow-hidden"
                       >
-                        <div className="pt-6 mt-6 border-t border-dashed border-border grid sm:grid-cols-2 gap-8">
-                          <div className="space-y-5">
-                            <div>
-                              <span className="field-tag text-muted-foreground block mb-1.5">Location</span>
-                              <span className="text-sm font-medium">{hazard.location}</span>
+                        <div className="pt-6 mt-6 border-t border-dashed border-border grid sm:grid-cols-2 gap-6 text-xs">
+                          {/* Visible Evidence & Potential Concern */}
+                          <div className="space-y-4">
+                            <div className="p-3 bg-muted/40 rounded-lg border border-border/60 space-y-1.5">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Eye className="w-3.5 h-3.5 text-brand" /> Direct Visual Observation
+                              </span>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {hazard.visibleObservation || hazard.reasoning || hazard.description}
+                              </p>
                             </div>
+
+                            <div className="p-3 bg-amber-500/5 rounded-lg border border-amber-500/20 space-y-1.5">
+                              <span className="font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                                <UserCheck className="w-3.5 h-3.5" /> Requires In-Person Physical Check
+                              </span>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {hazard.verificationRequirement ||
+                                  hazard.humanVerificationNote ||
+                                  "Confirm grip, mounting firmness, and actual clearance by direct physical touch."}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Limitations & Next Steps */}
+                          <div className="space-y-4 flex flex-col justify-between">
+                            <div className="p-3 bg-card rounded-lg border border-border space-y-1.5">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Wrench className="w-3.5 h-3.5 text-brand" /> Actionable Next Step
+                              </span>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {hazard.suggestedNextStep ||
+                                  hazard.suggestedAction ||
+                                  (recommendations.find((r) => r.relatedHazardIds?.includes(hazard.id))?.description ||
+                                    "Inspect this area with the resident to evaluate if it impedes natural walking transitions.")}
+                              </p>
+                            </div>
+
+                            <div className="p-3 bg-blue-500/5 rounded-lg border border-blue-500/20 space-y-1.5">
+                              <span className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                                <Info className="w-3.5 h-3.5" /> 2D Photo Analysis Limitations
+                              </span>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {hazard.limitations ||
+                                  "2D photograph cannot evaluate wall anchor strength, wet slip resistance, or structural framing under surface."}
+                              </p>
+                            </div>
+
                             {hazard.objectsInvolved && hazard.objectsInvolved.length > 0 && (
-                              <div>
-                                <span className="field-tag text-muted-foreground block mb-2">Objects involved</span>
+                              <div className="pt-1">
+                                <span className="text-muted-foreground block mb-1.5 font-medium">Associated Objects:</span>
                                 <div className="flex flex-wrap gap-1.5">
                                   {hazard.objectsInvolved.map((obj, i) => (
-                                    <span key={i} className="text-xs px-2.5 py-1 bg-muted text-muted-foreground">{obj}</span>
+                                    <span key={i} className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-[11px]">
+                                      {obj}
+                                    </span>
                                   ))}
                                 </div>
                               </div>
                             )}
-                            <div className="flex items-center gap-2 text-sm">
-                              <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-muted-foreground">Why it matters:</span>
-                            </div>
-                            <p className="text-sm text-foreground/80 leading-relaxed -mt-3">{hazard.impact}</p>
-                          </div>
-
-                          <div className="flex flex-col gap-4">
-                            <div className="flex-1">
-                              <span className="field-tag text-muted-foreground flex items-center gap-1.5 mb-2">
-                                <Info className="h-3.5 w-3.5" /> Reasoning
-                              </span>
-                              <p className="text-sm text-foreground/80 leading-relaxed">
-                                {hazard.reasoning || hazard.impact}
-                              </p>
-                            </div>
-                            <div className="flex gap-2 mt-auto pt-2">
-                              <Button variant="outline" size="sm" className="flex-1">
-                                <Wrench className="w-3.5 h-3.5 mr-1.5" /> See the fix
-                              </Button>
-                            </div>
                           </div>
                         </div>
                       </motion.div>

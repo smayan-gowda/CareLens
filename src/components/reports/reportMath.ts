@@ -1,5 +1,89 @@
 import { Hazard, Recommendation, HazardSeverity } from "@/types/ai";
 
+export const DEDUCTION_RATES: Record<HazardSeverity, number> = {
+  Critical: 15,
+  High: 10,
+  Medium: 5,
+  Low: 2,
+};
+
+export interface ScoreFormulaBreakdown {
+  base: number;
+  criticalCount: number;
+  criticalDeduction: number;
+  highCount: number;
+  highDeduction: number;
+  mediumCount: number;
+  mediumDeduction: number;
+  lowCount: number;
+  lowDeduction: number;
+  totalDeductions: number;
+  calculatedScore: number;
+  reviewedNotPresentCount: number;
+  refundedPoints: number;
+}
+
+/**
+ * Computes deterministic score deductions from active visible hazards.
+ * Findings marked by the user as 'not_present' do not penalize the score.
+ */
+export function getScoreFormulaBreakdown(hazards: Hazard[]): ScoreFormulaBreakdown {
+  const base = 100;
+  let criticalCount = 0;
+  let highCount = 0;
+  let mediumCount = 0;
+  let lowCount = 0;
+  let reviewedNotPresentCount = 0;
+  let refundedPoints = 0;
+
+  for (const h of hazards) {
+    if (h.feedback === "not_present") {
+      reviewedNotPresentCount++;
+      refundedPoints += DEDUCTION_RATES[h.severity] || 2;
+      continue;
+    }
+
+    switch (h.severity) {
+      case "Critical":
+        criticalCount++;
+        break;
+      case "High":
+        highCount++;
+        break;
+      case "Medium":
+        mediumCount++;
+        break;
+      case "Low":
+      default:
+        lowCount++;
+        break;
+    }
+  }
+
+  const criticalDeduction = criticalCount * DEDUCTION_RATES.Critical;
+  const highDeduction = highCount * DEDUCTION_RATES.High;
+  const mediumDeduction = mediumCount * DEDUCTION_RATES.Medium;
+  const lowDeduction = lowCount * DEDUCTION_RATES.Low;
+  const totalDeductions = criticalDeduction + highDeduction + mediumDeduction + lowDeduction;
+  const calculatedScore = Math.max(15, Math.min(100, base - totalDeductions));
+
+  return {
+    base,
+    criticalCount,
+    criticalDeduction,
+    highCount,
+    highDeduction,
+    mediumCount,
+    mediumDeduction,
+    lowCount,
+    lowDeduction,
+    totalDeductions,
+    calculatedScore,
+    reviewedNotPresentCount,
+    refundedPoints,
+  };
+}
+
 /** How much finishing remaining open recommendations could plausibly raise the
  * score — excludes already completed recommendations. */
 export function projectedScore(currentScore: number, recommendations: Recommendation[]): number {
@@ -10,9 +94,7 @@ export function projectedScore(currentScore: number, recommendations: Recommenda
   return Math.min(100, Math.round(currentScore + gain));
 }
 
-/** A plausible, deterministic time estimate from a recommendation's
- * difficulty rating — there's no time field in the data model, so this is
- * derived rather than invented per-item. */
+/** A plausible, deterministic time estimate from a recommendation's difficulty rating */
 export function estimatedTimeLabel(difficulty: Recommendation["difficulty"]): string {
   switch (difficulty) {
     case "Easy":
@@ -42,36 +124,31 @@ export function severityColor(severity: HazardSeverity): string {
 export function severityLabel(severity: HazardSeverity): string {
   switch (severity) {
     case "Critical":
-      return "Critical risk";
+      return "Critical Concern";
     case "High":
-      return "High risk";
+      return "High Attention";
     case "Medium":
-      return "Medium risk";
+      return "Medium Advisory";
     default:
-      return "Low risk";
+      return "Low / Minor Note";
   }
 }
 
-/** The per-finding "estimated improvement" — matched to a related
- * recommendation when one references this hazard, otherwise a conservative
- * fallback keyed to severity so every finding still reads as quantified. */
 export function estimatedImprovement(hazard: Hazard, recommendations: Recommendation[]): number {
   const related = recommendations.find((r) => r.relatedHazardIds?.includes(hazard.id));
   if (related) return related.expectedImpact;
   switch (hazard.severity) {
     case "Critical":
-      return 12;
+      return 15;
     case "High":
-      return 8;
+      return 10;
     case "Medium":
-      return 4;
+      return 5;
     default:
       return 2;
   }
 }
 
-/** Composes a short, human paragraph from the scan's real data — this is
- * string templating over existing fields, not a new data source. */
 export function buildExecutiveSummary(params: {
   roomType?: string;
   safetyScore: number;
@@ -79,31 +156,32 @@ export function buildExecutiveSummary(params: {
 }): string {
   const { roomType, safetyScore, hazards } = params;
   const room = roomType ? roomType.toLowerCase() : "room";
-  const critical = hazards.filter((h) => h.severity === "Critical");
-  const high = hazards.filter((h) => h.severity === "High");
-  const topConcern = critical[0] || high[0] || hazards[0];
+  const activeHazards = hazards.filter((h) => h.feedback !== "not_present");
+  const critical = activeHazards.filter((h) => h.severity === "Critical");
+  const high = activeHazards.filter((h) => h.severity === "High");
+  const topConcern = critical[0] || high[0] || activeHazards[0];
 
-  if (hazards.length === 0) {
-    return `This ${room} provides a genuinely safe environment. Lighting, clearances, and footing all fall within a comfortable range, and no meaningful risks stood out during review.`;
+  if (activeHazards.length === 0) {
+    return `No active visible hazards are currently flagged in this ${room}. Note that camera photos cannot assess non-visible factors such as structural anchor strength, floor slickness when wet, or concealed wiring.`;
   }
 
   const severityPhrase =
     critical.length > 0
-      ? "a few concerns that are worth addressing promptly"
+      ? "a few urgent concerns that should be inspected promptly"
       : high.length > 0
-      ? "some concerns worth addressing before they become a habit to work around"
-      : "a couple of small, easily manageable details";
+      ? "several visible items worth addressing to prevent trips and slips"
+      : "a few minor adjustments for improved accessibility";
 
   const concernPhrase = topConcern
-    ? ` The most notable is ${topConcern.title.toLowerCase()}, which ${topConcern.impact ? topConcern.impact.toLowerCase() : "increases risk more than its size would suggest"}.`
+    ? ` The primary item noted is ${topConcern.title.toLowerCase()}, which ${topConcern.impact ? topConcern.impact.toLowerCase() : "may impact footing or mobility"}.`
     : "";
 
   const scorePhrase =
     safetyScore >= 85
-      ? "Overall, this space is in good standing."
+      ? "Overall, this space shows high baseline accessibility."
       : safetyScore >= 60
-      ? "Overall, this space is functional but would benefit from a little attention."
-      : "Overall, this space would benefit from prompt attention.";
+      ? "Overall, this space is functional but would benefit from targeted improvements."
+      : "Overall, this room presents multiple points needing physical inspection and improvement.";
 
-  return `This ${room} is generally well set up, with ${severityPhrase}.${concernPhrase} ${scorePhrase}`;
+  return `This ${room} visual review identified ${severityPhrase}.${concernPhrase} ${scorePhrase}`;
 }

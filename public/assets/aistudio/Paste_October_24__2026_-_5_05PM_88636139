@@ -1,0 +1,491 @@
+# CARELENS — MASTER ENGINEERING, RELIABILITY & TECHNICAL EXCELLENCE DIRECTIVE
+
+## YOUR ROLE
+
+Act as a principal software engineer, computer-vision engineer, AI reliability researcher, security engineer, accessibility specialist, and demanding code reviewer working on my existing application, CareLens.
+
+Your job is to transform CareLens into an exceptionally well-engineered, evidence-grounded, dependable, accessible, and technically sophisticated home-safety assessment application for older adults, people with mobility limitations, family caregivers, and other users.
+
+This is an implementation task, not a brainstorming exercise.
+
+You have permission to inspect, refactor, improve, test, and extend the existing codebase as necessary to accomplish this objective. Preserve the product's useful functionality and visual identity while substantially improving the quality of its underlying implementation.
+
+The target is not merely a polished frontend that calls an AI API. The target is a coherent application with reliable processing, defensible findings, transparent reasoning, robust failure handling, measurable performance, and maintainable engineering.
+
+## THE MOST IMPORTANT RULE: INSPECT, EVALUATE, THEN ACT
+
+Before changing anything, inspect the actual repository and determine how the application currently works.
+
+Do not blindly assume that a feature is missing because it appears in this specification. Do not blindly assume that it is implemented correctly because a component, function, button, or similarly named file exists.
+
+For EVERY major requirement, make one of these decisions:
+
+**A. Already implemented excellently:** Verify the actual behavior in code and through appropriate tests. If it meets the requirement thoroughly, preserve it and move to the next requirement.
+
+**B. Implemented but improvable:** Improve the existing implementation in place. Preserve sound architecture and working behavior. Fix weaknesses rather than adding a duplicate implementation.
+
+**C. Partially implemented or unreliable:** Finish the existing feature, correct its logic, integrate it properly, and test it.
+
+**D. Missing:** Implement the feature using the existing technology stack and architecture wherever practical.
+
+**E. Infeasible, unnecessary, or unsafe:** Explain the specific reason, implement the strongest reasonable alternative when possible, and do not pretend the original requirement was completed.
+
+A feature is not complete merely because its UI exists. It must behave correctly, handle relevant edge cases, and be integrated into the real application.
+
+Do not waste time rebuilding excellent functionality. Do not skip mediocre functionality. Do not create parallel systems that compete with existing ones.
+
+Inspect the real source code, dependencies, configuration, API boundaries, database schema, authentication, storage, routing, state management, and tests before deciding what to change.
+
+Do not assume any filename, service, API, database, or architecture described below exists until you verify it.
+
+---
+
+# OBJECTIVE 1: MAKE THE CORE PRODUCT EXCEPTIONALLY GOOD
+
+The primary user journey is:
+
+**Choose a room image → assess image suitability → analyze visible evidence → identify potential concerns → validate findings → present understandable recommendations → allow user review → save a traceable report.**
+
+This journey is the heart of CareLens. Optimize it before investing time in secondary features.
+
+Users should be able to understand what CareLens observed, why a potential concern was raised, where the supporting evidence appears in the image, what remains uncertain, and what they should do next.
+
+### Required improvements
+
+1. Make the photo-selection and upload experience reliable on desktop and mobile.
+2. Validate file type, size, image dimensions, decoding, and other relevant input constraints before analysis.
+3. Handle unsupported, corrupted, blurry, poorly illuminated, obstructed, and otherwise unsuitable images appropriately.
+4. Display meaningful processing states tied to actual asynchronous operations.
+5. Prevent duplicate submissions and handle cancellation, retries, timeouts, network failures, and malformed model output safely.
+6. Preserve the selected image and recoverable user input when an operation fails.
+7. Ensure the displayed room, image, assessment findings, score, and saved report always correspond to the correct assessment.
+8. Make all primary controls functional, accessible, and understandable.
+9. Keep the existing visual identity unless a specific design change materially improves usability.
+10. Remove simulated functionality that could be mistaken for genuine processing.
+
+Do not add unnecessary complexity simply to make the system appear sophisticated.
+
+---
+
+# OBJECTIVE 2: TURN AI OUTPUT INTO STRUCTURED, EVIDENCE-GROUNDED FINDINGS
+
+Examine how the existing vision-model integration works. Improve the existing pipeline before considering whether a new model, framework, or service is necessary.
+
+The system should not simply ask a language model to inspect a photo, generate arbitrary hazard descriptions, and immediately publish them as established facts.
+
+Build or improve a structured processing pipeline that separates:
+
+1. Image validation.
+2. Visual evidence extraction.
+3. Candidate concern generation.
+4. Output schema and logical validation.
+5. Finding qualification and uncertainty handling.
+6. Deterministic assessment rules.
+7. User review.
+8. Traceable report generation.
+
+Use fewer stages when the existing architecture can accomplish the same objective reliably. Introduce additional model calls only when their expected benefit is justified and can be tested.
+
+### Every finding must distinguish the following
+
+- **Visible observation:** What the image actually supports.
+- **Potential concern:** Why that observation might matter for home safety.
+- **Supporting evidence:** The specific image region or other evidence supporting the finding.
+- **Severity:** How consequential the concern might be if confirmed.
+- **Detection uncertainty:** How reliable the visual interpretation is, if that uncertainty can be meaningfully estimated.
+- **Verification requirement:** What a person must inspect or confirm.
+- **Limitations:** What cannot be determined from the available image.
+- **Recommended next step:** An appropriate, actionable check or precaution.
+- **Review status:** Whether the user has confirmed, disputed, or left the finding unresolved.
+
+Do not combine severity, confidence, and verification status into one number or label.
+
+Do not treat an LLM's self-reported confidence as a calibrated probability. Do not invent numerical confidence values when the underlying model cannot support them.
+
+### Ground claims in the actual photograph
+
+For example, identifying a floor rug is different from proving that it slides. Identifying a grab bar is different from establishing that it is securely mounted. Seeing an apparent walking route is different from measuring safe clearance for a particular person.
+
+Make these distinctions explicit in both the internal data representation and the user interface.
+
+If evidence is insufficient, allow the system to abstain, request a better image, ask a relevant follow-up question, or present a qualified observation.
+
+Never force the AI to produce a hazard simply because the user expects a result.
+
+### Validate image annotations
+
+If the application displays bounding boxes, polygons, masks, or other visual annotations:
+
+- Validate coordinate ranges, dimensions, types, and image-size assumptions.
+- Verify the mapping between model output and the displayed image.
+- Prevent annotations from silently shifting when images are resized, cropped, or rotated.
+- Handle missing, malformed, or unsupported annotations.
+- Associate each annotation with the correct finding.
+- Never fabricate an annotation to make an AI result appear convincing.
+
+Structural validation does not prove visual accuracy. Build tests using manually annotated reference images to measure whether detections actually identify the intended objects.
+
+If the current model cannot reliably localize an object, use an honest text-based finding or a qualified region rather than drawing a misleading box. Only introduce a specialized object-detection or segmentation model if an evaluation demonstrates that it improves an important weakness.
+
+---
+
+# OBJECTIVE 3: BUILD A DETERMINISTIC, AUDITABLE ASSESSMENT ENGINE
+
+Review the existing scoring and risk-assessment logic in full.
+
+The language model must not have unrestricted authority to assign arbitrary final scores or represent its predictions as scientifically validated measurements.
+
+Implement a deterministic assessment engine where appropriate. Keep the rules explicit, documented, testable, and separate from free-form model-generated explanations.
+
+The engine must have clearly defined behavior for:
+
+- Candidate findings.
+- Duplicate findings.
+- Severity classifications.
+- Unresolved findings.
+- User-confirmed or user-disputed findings.
+- Missing or insufficient evidence.
+- Changes to assessment rules.
+- Invalid inputs and edge cases.
+- Score boundaries and rounding.
+- Saved reports and report recalculation.
+
+If a 0–100 score is retained, call it a clearly defined preliminary visual index rather than an objective probability of a fall or a definitive measure of home safety.
+
+Document the exact formula, the justification for its choices, and its limitations. Do not claim that arbitrary deduction weights are scientifically validated.
+
+Make the calculation reproducible from the saved assessment data and the version of the rules used to calculate it.
+
+Ensure that a user's correction updates the report consistently. Do not allow an unverified AI prediction to become a verified hazard merely because the user opened the report.
+
+Test the scoring engine independently of the frontend and AI provider.
+
+Use property-based or systematic edge-case tests when useful, including duplicate inputs, all findings dismissed, all findings active, invalid severities, empty results, and score-boundary conditions.
+
+If a numerical score adds more confusion than value, prefer a clear findings summary and review status over a misleading number.
+
+---
+
+# OBJECTIVE 4: MAKE THE SYSTEM MEASURABLY DEPENDABLE
+
+Do not judge AI quality by how convincing one demonstration looks.
+
+Create or improve a repeatable evaluation system that tests the actual assessment pipeline against a fixed set of appropriately licensed or staged room photographs.
+
+The evaluation workflow should ideally support manually labeled reference findings, repeatable test runs, metric calculation, failure inspection, and comparison between different pipeline versions.
+
+### Build a carefully labeled pilot dataset
+
+Start with a manageable collection of diverse room images. Include different room types, camera angles, illumination conditions, partial occlusions, image quality levels, and scenes with no obvious target concern.
+
+For each image, document:
+
+- Reference objects and supported visible concerns.
+- Their approximate locations.
+- Findings that should not be asserted.
+- Situations where the image is insufficient.
+- Annotation criteria and known ambiguities.
+
+Use a pilot dataset to discover weaknesses, then expand it as resources permit. A small collection is useful for development but does not justify broad claims about performance in real homes.
+
+Where possible, have an independent reviewer assess a subset of examples so that evaluation is not based entirely on the developer's own interpretation.
+
+### Implement relevant metrics
+
+When appropriate for the actual detection task, calculate:
+
+- Precision and recall.
+- False-positive and false-negative counts.
+- Localization accuracy, including intersection over union for bounding boxes.
+- Unsupported-claim rate.
+- Appropriate abstention when evidence is insufficient.
+- Results by finding category and relevant image conditions.
+- Repeatability across repeated runs.
+- Processing latency and failure rate.
+
+Define what counts as a correct finding before calculating the metrics. Separate ambiguous cases and explain how they are treated.
+
+Do not use a single aggregate score to hide a serious weakness in one category. Do not invent data, manually alter results to improve the reported metrics, or describe a pilot dataset as representative of all homes.
+
+### Compare versions, not impressions
+
+Where feasible, compare the current implementation against the improved pipeline on the same evaluation examples.
+
+Determine whether changes improve the relevant metrics without creating unacceptable trade-offs elsewhere.
+
+A sophisticated improvement might reduce unsupported assertions while preserving recall, or improve image localization without increasing false alarms.
+
+If the proposed improvement does not work, document the result and investigate why. Do not report success without supporting evidence.
+
+The evaluation system itself must be testable and reproducible. Keep test data, evaluation code, metric definitions, and version information organized.
+
+---
+
+# OBJECTIVE 5: IMPLEMENT BETTER UNCERTAINTY AND IMAGE-QUALITY HANDLING
+
+Improve the system's ability to identify when an assessment should not be trusted.
+
+Distinguish between:
+
+- A clear image with reasonably interpretable visible evidence.
+- A partial view that supports only limited conclusions.
+- An image with significant blur, obstruction, or insufficient visibility.
+- A situation requiring a different viewpoint or additional information.
+- An unsupported conclusion that must not be displayed as fact.
+
+Do not confuse image quality with detection confidence. Do not assume a model's confidence estimate is calibrated merely because it returns a numerical value.
+
+Where appropriate, ask users to provide another viewpoint or manually verify an observation.
+
+Assess the trade-offs between detecting as many potential concerns as possible and avoiding unsupported warnings. Make the chosen behavior explicit rather than hiding these trade-offs.
+
+Never communicate that a room is completely safe merely because the model did not identify an obvious issue.
+
+---
+
+# OBJECTIVE 6: MAKE REPORTS TRACEABLE AND USEFUL
+
+Every report should make it possible to understand how its findings were generated and what happened afterward.
+
+Preserve, as appropriate:
+
+- Assessment identifier and creation timestamp.
+- Room and image association.
+- Model and provider information available from the real API.
+- Schema and assessment-rule versions.
+- Structured findings and evidence references.
+- Review status and user corrections.
+- Calculation inputs and resulting index, if applicable.
+- Known limitations and errors.
+
+Avoid storing unnecessary personal information or raw photos in debugging logs.
+
+Ensure reports cannot accidentally combine information from two different assessments.
+
+Make report generation robust to missing fields, malformed data, and deleted or inaccessible images.
+
+Printing, exporting, opening, saving, editing, and revisiting reports should work as intended. If a capability is not implemented, either implement it properly or remove misleading controls.
+
+Keep the output understandable to ordinary users rather than exposing unnecessary technical detail.
+
+---
+
+# OBJECTIVE 7: VERIFY SECURITY, PRIVACY, AND DATA HANDLING
+
+Inspect the real backend and frontend before making privacy claims.
+
+Determine where images are uploaded, which services process them, where files and metadata are stored, how authentication and authorization work, and how deletion is implemented.
+
+Verify that:
+
+- API credentials and secrets are not exposed in client-side code.
+- Server endpoints enforce appropriate validation and authorization.
+- Users cannot access other users' private assessments by changing identifiers.
+- File uploads follow appropriate type, size, and access controls.
+- Sensitive data is not unnecessarily logged or embedded in error messages.
+- Storage access and deletion behavior match the application's stated privacy policy.
+- Third-party processing is accurately disclosed.
+- Failure handling does not accidentally expose credentials or personal information.
+
+Do not claim encryption, confidentiality, deletion guarantees, professional approval, or regulatory compliance without evidence.
+
+Do not rebuild authentication or storage unnecessarily if the existing implementation is sound. Fix the actual weakness you discover.
+
+---
+
+# OBJECTIVE 8: RAISE THE QUALITY OF THE ENTIRE USER EXPERIENCE
+
+Preserve CareLens's recognizable visual identity while improving consistency, usability, and accessibility.
+
+Audit every major route and feature, including the overview, scan experience, room and property management, photo library, assessments, reports, marketplace, network, notifications, and settings.
+
+For each feature, determine whether it is useful, functional, understandable, and properly connected to the rest of the application.
+
+Improve:
+
+- Navigation clarity and consistency.
+- Responsive layouts.
+- Keyboard navigation and visible focus.
+- Accessible names for icon-only controls.
+- Contrast, readable text, and properly labeled severity indicators.
+- Touch targets and form feedback.
+- Loading, error, empty, and success states.
+- Clear distinction between live analysis, saved results, and demonstration data.
+- Data persistence and recovery from failures.
+- Consistency between displayed information and underlying state.
+
+Aim for WCAG 2.2 AA where applicable and verify the important requirements through automated checks and manual testing. Do not claim full compliance solely because a tool reports no violations.
+
+Do not add decorative cards, charts, metrics, or features merely to make the interface seem more sophisticated.
+
+Every significant element should help users understand the assessment, make a decision, or accomplish a task.
+
+Keep secondary features when they are useful and functional; improve, simplify, or remove elements that are misleading or detract from the core experience.
+
+---
+
+# OBJECTIVE 9: HANDLE SAMPLE MODE AND DEMONSTRATIONS HONESTLY
+
+If sample assessments are useful for first-time users or judges, implement them using clearly labeled, deterministic sample data.
+
+Sample mode must be distinguishable from live analysis everywhere the distinction matters.
+
+Sample results must not be presented as freshly analyzed results, actual household assessments, independently verified findings, or evidence of model performance.
+
+Use genuine images with appropriate usage rights and valid, manually reviewed annotations where overlays are shown.
+
+Ensure sample-mode actions cannot accidentally overwrite live reports or contaminate evaluation results.
+
+If an existing sample workflow already works well, validate it and improve only what is necessary.
+
+---
+
+# OBJECTIVE 10: APPLY PROFESSIONAL ENGINEERING PRACTICES
+
+Inspect the current architecture and identify the most consequential technical weaknesses.
+
+Improve:
+
+- Type safety and domain-specific data structures.
+- Separation of UI, business logic, AI integration, and storage.
+- Error handling and failure recovery.
+- Input and output validation.
+- State consistency.
+- Asynchronous processing.
+- Performance and unnecessary network requests.
+- Dependency and configuration management.
+- Maintainability and meaningful code organization.
+- Automated test coverage for critical behavior.
+
+Use established patterns where they solve a real problem, not simply because they sound sophisticated.
+
+Do not introduce microservices, custom model training, databases, queues, libraries, or infrastructure without a clear justification.
+
+Avoid giant rewrites. Prefer small, coherent, testable changes that preserve existing working functionality.
+
+Remove unused code and genuinely redundant systems where doing so is safe. Do not remove features simply because their names are unfamiliar or their original intent is unclear.
+
+---
+
+# EXECUTION PROTOCOL
+
+Follow this protocol throughout implementation.
+
+## Stage 1 — Repository inspection
+
+Inspect the repository and understand the real implementation.
+
+Create an internal checklist mapping the requirements above to actual source files, behavior, tests, and known deficiencies.
+
+Do not stop to ask me to confirm each decision. Make reasonable, conservative engineering decisions based on the existing application.
+
+## Stage 2 — Prioritization
+
+Prioritize work by:
+
+1. Incorrect, misleading, or fabricated behavior.
+2. Failures in the primary scan-to-report workflow.
+3. AI evidence quality and assessment correctness.
+4. Security and privacy weaknesses.
+5. Data integrity and report consistency.
+6. Missing tests and reliability gaps.
+7. Accessibility and usability.
+8. Performance and maintainability.
+9. Lower-impact polish.
+
+Adjust this order when a discovered security risk or architectural dependency requires it.
+
+## Stage 3 — Implementation
+
+Make the changes directly in the existing codebase.
+
+For each requirement:
+
+- If it already works exceptionally well, verify it and move to the next.
+- If it is good but not excellent, improve its actual weaknesses.
+- If it is incomplete, finish it.
+- If it is missing, implement it.
+- If an improvement would add complexity without meaningful benefit, retain the simpler design.
+- If a claim cannot be substantiated, make the system more transparent rather than fabricating evidence.
+
+Do not merely create TODO comments, placeholder implementations, static mock metrics, or nonfunctional UI controls to make a requirement appear complete.
+
+Do not repeatedly ask the AI to regenerate the entire application. Make targeted changes using the existing project structure.
+
+## Stage 4 — Testing after changes
+
+Run the available build, lint, type-check, and automated test commands. Add or update tests for every important behavior changed.
+
+Exercise the real critical paths as far as the available environment allows.
+
+Verify both successful execution and appropriate failure handling. Inspect regressions in authentication, navigation, image processing, saved data, reports, and sample mode.
+
+Do not mark tests as passing if they were not run. Distinguish code inspection, mocked tests, real API tests, and manual verification.
+
+If an external service, credential, device, or deployment environment is unavailable, document the exact limitation and complete all feasible local verification.
+
+## Stage 5 — Final quality audit
+
+After implementation, inspect the modified code again.
+
+Look for:
+
+- Duplicate or contradictory logic.
+- Broken routes and dead buttons.
+- Unhandled promises and error states.
+- Unvalidated model output.
+- Incorrect image annotations.
+- Inconsistent score calculations.
+- Lost or mismatched assessment data.
+- Misleading sample results.
+- Incorrect privacy claims.
+- Accessibility regressions.
+- Tests that merely restate assumptions rather than verify behavior.
+- Newly introduced dependencies or configuration that are unnecessary.
+
+Fix defects introduced by your changes before reporting completion.
+
+---
+
+# DEFINITION OF DONE
+
+The task is not done merely because the interface looks better.
+
+It is complete to the extent that the actual implementation demonstrates the following:
+
+1. The primary workflow functions reliably.
+2. Findings are structured, qualified, and tied to appropriate evidence.
+3. Unsupported conclusions are not silently presented as facts.
+4. Image annotations are validated and evaluated against reference examples where applicable.
+5. Any score is transparent, deterministic, and appropriately limited in meaning.
+6. User corrections have consistent behavior.
+7. Errors are handled honestly and recoverably.
+8. Reports preserve correct, traceable data.
+9. Security and privacy statements match the implementation.
+10. Critical tests and available build checks have been run.
+11. Existing useful functionality remains intact.
+12. Known limitations are documented accurately.
+
+Not every advanced capability must be added if it does not serve the product. Technical excellence means solving the right problems correctly, not maximizing the number of components.
+
+## FINAL RESPONSE REQUIRED
+
+After carrying out the work, provide:
+
+**1. Major changes:** What was actually modified and why.
+
+**2. Existing features preserved:** Features inspected and found good enough to retain.
+
+**3. Reliability improvements:** Concrete behavior that is now more robust.
+
+**4. Testing evidence:** Exact commands or test suites run, outcomes, and any failures.
+
+**5. AI evaluation:** Actual measured results, if evaluation was performed. Otherwise, state exactly what remains unevaluated. Never invent metrics.
+
+**6. Remaining weaknesses:** Important limitations, unresolved bugs, and external verification requirements.
+
+**7. Next priorities:** Only the highest-impact remaining work, ordered by importance.
+
+Do not claim the application is extraordinary, production-ready, validated, secure, or dependable merely because you have finished editing it. Describe what the evidence supports.
+
+BEGIN BY INSPECTING THE ACTUAL REPOSITORY. THEN IMPLEMENT, TEST, AUDIT, AND IMPROVE THE APPLICATION DIRECTLY. DO NOT STOP AFTER PRODUCING A PLAN.

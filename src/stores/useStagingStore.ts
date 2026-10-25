@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { StagedPhoto, RoomType } from '@/types/home';
-import { db, cleanUndefined, handleFirestoreError, OperationType } from '@/lib/firebase';
+import { db, auth, cleanUndefined, handleFirestoreError, OperationType } from '@/lib/firebase';
 import { 
   collection, 
   query, 
@@ -9,6 +9,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
+  getDocs,
   doc,
   orderBy 
 } from 'firebase/firestore';
@@ -136,15 +137,53 @@ export const useStagingStore = create<StagingState>((set, get) => ({
     }
   },
 
-  deletePhoto: async (photoId) => {
+  deletePhoto: async (photoId: string) => {
+    console.log('Attempting to delete staged photo:', photoId);
+    const state = get();
+    const existingIndex = state.photos.findIndex((p) => p.id === photoId);
+    if (existingIndex === -1) return;
+    const existing = state.photos[existingIndex];
+
+    const isSample = 
+      Boolean((existing as any)?.isSample) || 
+      photoId.startsWith('sample-') || 
+      photoId.startsWith('demo-');
+
+    // Snapshot current state for rollback if server deletion fails
+    const previousPhotos = [...state.photos];
+
+    // 1. Optimistically remove from local state immediately so UI updates responsively
+    set({ photos: state.photos.filter((p) => p.id !== photoId) });
+
+    // 2. If it is a demo or sample item, remove only locally without issuing privileged Firestore mutations
+    if (isSample) {
+      console.log('Sample photo removed from local session:', photoId);
+      return;
+    }
+
+    // 3. Ownership security check
+    const currentUid = auth.currentUser?.uid;
+    if (existing.userId && currentUid && existing.userId !== currentUid) {
+      // Revert optimistic removal
+      set({ photos: previousPhotos });
+      throw new Error("Permission Denied: You do not have permission to delete this photo.");
+    }
+
+    // 4. Best-effort Firebase Storage object cleanup
+    if (existing.imageUrl) {
+      deleteImageFromStorage(existing.imageUrl).catch((err) => {
+        console.warn('Storage cleanup warning:', err);
+      });
+    }
+
+    // 5. Cloud Firestore deletion with rollback on error
     try {
-      const existing = get().photos.find((p) => p.id === photoId);
-      if (existing?.imageUrl) {
-        deleteImageFromStorage(existing.imageUrl).catch(() => {});
-      }
       await deleteDoc(doc(db, 'stagedPhotos', photoId));
-      set((state) => ({ photos: state.photos.filter((p) => p.id !== photoId) }));
+      console.log('Photo deleted successfully from Firestore:', photoId);
     } catch (error) {
+      console.error('Firestore deletion failed, rolling back optimistic removal:', error);
+      // Restore photo in state so the user never has a phantom deletion
+      set({ photos: previousPhotos });
       handleFirestoreError(error, OperationType.DELETE, `stagedPhotos/${photoId}`);
       throw error;
     }

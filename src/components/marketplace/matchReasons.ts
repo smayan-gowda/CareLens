@@ -1,29 +1,65 @@
-/** Turns a provider's already-computed specialties + match score into a
- * short list of concrete reasons, so "92% Match" becomes something a person
- * can actually evaluate. Purely derived from data that's already fetched —
- * no new API calls, no change to calculateMatchScore itself. */
+/**
+ * Generates transparent, descriptive trade tags for directory listings,
+ * connecting specific specialties to assessment recommendations without
+ * fabricating uncalibrated percentage match scores.
+ */
 export function getMatchReasons(provider: any, latestScan: any): string[] {
   const reasons: string[] = [];
 
   const specialties: string[] = provider.specialties || [];
-  reasons.push(...specialties.slice(0, 3));
+  reasons.push(...specialties.slice(0, 2));
 
   if (latestScan?.roomType) {
-    reasons.push(`Relevant to your ${latestScan.roomType} assessment`);
+    reasons.push(`Relevant to ${latestScan.roomType} safety`);
   }
 
-  if (provider.rating >= 4.5) {
-    reasons.push(`Highly rated (${provider.rating}★, ${provider.reviewsCount ?? 0} reviews)`);
+  if (provider.rating && provider.rating >= 4.0) {
+    reasons.push(`Yelp Rating: ${provider.rating}★ (${provider.reviewsCount ?? 0} reviews)`);
   }
 
-  reasons.push("Serves your neighborhood");
+  if (provider.isYelp) {
+    reasons.push("Verified Local Business Directory");
+  }
 
-  return Array.from(new Set(reasons)).slice(0, 4);
+  return Array.from(new Set(reasons)).slice(0, 3);
 }
 
-export function matchLabel(score: number): string {
-  if (score >= 90) return "Excellent Match";
-  if (score >= 80) return "Strong Match";
-  if (score >= 70) return "Good Match";
-  return "Possible Match";
+export function matchLabel(provider: any, latestScan: any): string {
+  const searchable = [
+    ...(provider.categories || []),
+    ...(provider.specialties || []),
+    provider.name || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (latestScan?.recommendations) {
+    for (const rec of latestScan.recommendations) {
+      const title = (rec.title || "").toLowerCase();
+      if (
+        (searchable.includes("grab") || searchable.includes("rail")) &&
+        (title.includes("grab") || title.includes("rail") || title.includes("bar"))
+      ) {
+        return "Specialty: Grab Bars & Handrails";
+      }
+      if (
+        (searchable.includes("floor") || searchable.includes("carpet") || searchable.includes("tile")) &&
+        (title.includes("floor") || title.includes("slip") || title.includes("rug"))
+      ) {
+        return "Specialty: Slip-Resistant Flooring";
+      }
+      if (
+        (searchable.includes("light") || searchable.includes("electric")) &&
+        (title.includes("light") || title.includes("illumination") || title.includes("sensor"))
+      ) {
+        return "Specialty: Pathway Lighting";
+      }
+    }
+  }
+
+  if (searchable.includes("plumb")) return "Trade: Bathroom & Plumbing";
+  if (searchable.includes("electric")) return "Trade: Electrical & Lighting";
+  if (searchable.includes("handyman") || searchable.includes("contractor")) return "Trade: Home Accessibility";
+
+  return "Local Directory Reference";
 }

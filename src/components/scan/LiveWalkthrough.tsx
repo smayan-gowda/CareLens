@@ -1,15 +1,34 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   X, Mic, MicOff, Video, VideoOff, SwitchCamera, Send, 
-  Sparkles, MessageSquare, Volume2, ShieldAlert, Clock, 
-  Trash2, Bot, User, CheckCircle2, Lock, Copy, Check 
+  Volume2, ShieldAlert, Clock, Trash2, User, Copy, Check,
+  Camera, Sparkles, CheckCircle2, ChevronRight, Layers
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
-import { LensMark, LensMarkBadge } from "@/components/brand/LensMark";
+import { LensMark } from "@/components/brand/LensMark";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useStagingStore } from "@/stores/useStagingStore";
+import { RoomType } from "@/types/home";
 
-function pcmToBase64(pcmData: Float32Array) {
+function resampleTo16k(audioData: Float32Array, origSampleRate: number): Float32Array {
+  if (origSampleRate === 16000) return audioData;
+  const ratio = origSampleRate / 16000;
+  const newLength = Math.round(audioData.length / ratio);
+  const result = new Float32Array(newLength);
+  
+  for (let i = 0; i < newLength; i++) {
+    const origIndex = i * ratio;
+    const indexFloor = Math.floor(origIndex);
+    const indexCeil = Math.min(audioData.length - 1, Math.ceil(origIndex));
+    const fraction = origIndex - indexFloor;
+    result[i] = audioData[indexFloor] * (1 - fraction) + audioData[indexCeil] * fraction;
+  }
+  return result;
+}
+
+function pcmToBase64(pcmData: Float32Array): string {
   const buffer = new ArrayBuffer(pcmData.length * 2);
   const view = new DataView(buffer);
   for (let i = 0; i < pcmData.length; i++) {
@@ -17,10 +36,12 @@ function pcmToBase64(pcmData: Float32Array) {
     s = s < 0 ? s * 0x8000 : s * 0x7FFF;
     view.setInt16(i * 2, s, true);
   }
-  let binary = "";
   const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  let binary = "";
+  const chunkSize = 1024;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
   }
   return btoa(binary);
 }
@@ -49,16 +70,41 @@ interface ChatMessage {
   isPlaceholder?: boolean;
 }
 
-const OT_SUGGESTIONS = [
-  { label: "Assess rug trip risk", emoji: "🛋️" },
-  { label: "Check shower grab bars", emoji: "🚿" },
-  { label: "Evaluate stair lighting", emoji: "💡" },
-  { label: "Is path wide for walker?", emoji: "🚪" },
-  { label: "Check cord hazards", emoji: "⚡" },
-  { label: "Inspect transfer safety", emoji: "🛏️" }
+interface FlaggedSnapshot {
+  id: string;
+  imageUrl: string;
+  timestamp: string;
+  title: string;
+  stagedId?: string;
+}
+
+const CLINICAL_OBSERVATION_PROMPTS = [
+  { label: "Assess grab bar needs", emoji: "🚿" },
+  { label: "Check rug trip hazard", emoji: "🛋️" },
+  { label: "Inspect step lighting", emoji: "💡" },
+  { label: "Measure walker clearance", emoji: "🚪" },
+  { label: "Check trailing cables", emoji: "⚡" },
+  { label: "Evaluate bed transfer safety", emoji: "🛏️" }
 ];
 
-export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
+interface LiveWalkthroughProps {
+  onClose: () => void;
+  homeId?: string;
+  roomId?: string;
+  roomType?: RoomType;
+  onSnapshotSaved?: (photoUrl: string) => void;
+}
+
+export function LiveWalkthrough({ 
+  onClose, 
+  homeId, 
+  roomId, 
+  roomType = 'living',
+  onSnapshotSaved
+}: LiveWalkthroughProps) {
+  const { user } = useAuthStore();
+  const { addPhoto } = useStagingStore();
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -72,18 +118,48 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
   const [isAiSpeaking, setIsAiSpeaking] = useState<boolean>(false);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  
+  // Real-time audio & camera telemetry
+  const [micLevel, setMicLevel] = useState<number>(0);
+  const [cameraResolution, setCameraResolution] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [isFlashing, setIsFlashing] = useState<boolean>(false);
+  const [flaggedSnapshots, setFlaggedSnapshots] = useState<FlaggedSnapshot[]>([]);
+  const [showSnapshotsDrawer, setShowSnapshotsDrawer] = useState<boolean>(false);
+  const [isSavingSnapshot, setIsSavingSnapshot] = useState<boolean>(false);
+  const [hasCopiedTranscript, setHasCopiedTranscript] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
   const inputAudioCtxRef = useRef<AudioContext | null>(null);
   const outputAudioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const muteGainRef = useRef<GainNode | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const animFrameRef = useRef<number | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   
   const videoIntervalRef = useRef<number | null>(null);
   const subtitleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
+
+  const micMutedRef = useRef(micMuted);
+  const videoMutedRef = useRef(videoMuted);
+  useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
+  useEffect(() => { videoMutedRef.current = videoMuted; }, [videoMuted]);
+
+  // AudioContext auto-resumer for browser autoplay policies
+  const resumeAudioContexts = useCallback(() => {
+    if (inputAudioCtxRef.current && inputAudioCtxRef.current.state === 'suspended') {
+      inputAudioCtxRef.current.resume().catch(console.error);
+    }
+    if (outputAudioCtxRef.current && outputAudioCtxRef.current.state === 'suspended') {
+      outputAudioCtxRef.current.resume().catch(console.error);
+    }
+  }, []);
 
   // Cooldown countdown timer
   useEffect(() => {
@@ -94,17 +170,26 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
     return () => clearInterval(interval);
   }, [cooldownSeconds]);
 
+  // Main session lifecycle
   useEffect(() => {
     let ws: WebSocket | undefined;
     let isActive = true;
 
     async function startSession() {
       try {
-        let stream;
+        let stream: MediaStream;
         try {
           stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: true, 
-            video: { facingMode } 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }, 
+            video: { 
+              facingMode,
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            } 
           });
         } catch (e) {
           stream = await navigator.mediaDevices.getUserMedia({ 
@@ -112,10 +197,24 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
             video: true 
           });
         }
+        
+        if (!isActive) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
         streamRef.current = stream;
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            if (videoRef.current) {
+              setCameraResolution({
+                width: videoRef.current.videoWidth,
+                height: videoRef.current.videoHeight
+              });
+            }
+          };
         }
 
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -123,37 +222,162 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
         ws = newWs;
         wsRef.current = newWs;
 
-        const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-        const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        // Setup 16kHz audio input context for Gemini Live API
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const inputCtx = new AudioContextClass({ sampleRate: 16000 });
+        const outputCtx = new AudioContextClass({ sampleRate: 24000 });
+        
         inputAudioCtxRef.current = inputCtx;
         outputAudioCtxRef.current = outputCtx;
 
+        // Resume audio context immediately if possible
+        if (inputCtx.state === 'suspended') {
+          inputCtx.resume().catch(() => {});
+        }
+        if (outputCtx.state === 'suspended') {
+          outputCtx.resume().catch(() => {});
+        }
+
         const source = inputCtx.createMediaStreamSource(stream);
-        const processor = inputCtx.createScriptProcessor(4096, 1, 1);
+
+        // Setup real-time AnalyserNode for live decibel volume wave
+        const analyser = inputCtx.createAnalyser();
+        analyser.fftSize = 64;
+        analyser.smoothingTimeConstant = 0.3;
+        analyserRef.current = analyser;
+        source.connect(analyser);
+
+        // Metering loop
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const updateAudioMeter = () => {
+          if (!isActive) return;
+          if (analyserRef.current && !micMutedRef.current) {
+            analyserRef.current.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            // Scale to 0-100 range
+            const normalized = Math.min(100, Math.round((average / 128) * 100));
+            setMicLevel(normalized);
+          } else {
+            setMicLevel(0);
+          }
+          animFrameRef.current = requestAnimationFrame(updateAudioMeter);
+        };
+        animFrameRef.current = requestAnimationFrame(updateAudioMeter);
+
+        sourceRef.current = source;
+
+        // ScriptProcessor to capture audio with resampler to guarantee exact 16kHz
+        const processor = inputCtx.createScriptProcessor(2048, 1, 1);
+        processorRef.current = processor;
         source.connect(processor);
-        processor.connect(inputCtx.destination);
+
+        // Mute gain node to prevent mic echoing into speakers while keeping processing loop active
+        const muteGain = inputCtx.createGain();
+        muteGain.gain.value = 0;
+        muteGainRef.current = muteGain;
+        processor.connect(muteGain);
+        muteGain.connect(inputCtx.destination);
         
-        stream.getAudioTracks()[0].enabled = !micMuted;
-        stream.getVideoTracks()[0].enabled = !videoMuted;
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks[0]) audioTracks[0].enabled = !micMuted;
+        const videoTracks = stream.getVideoTracks();
+        if (videoTracks[0]) videoTracks[0].enabled = !videoMuted;
 
         processor.onaudioprocess = (e) => {
-          if (ws.readyState === WebSocket.OPEN && !micMutedRef.current) {
-            const base64 = pcmToBase64(e.inputBuffer.getChannelData(0));
+          if (ws?.readyState === WebSocket.OPEN && !micMutedRef.current) {
+            const rawPcm = e.inputBuffer.getChannelData(0);
+            const actualRate = e.inputBuffer.sampleRate || inputCtx.sampleRate || 48000;
+            const resampled16k = resampleTo16k(rawPcm, actualRate);
+            const base64 = pcmToBase64(resampled16k);
             ws.send(JSON.stringify({ audio: base64 }));
           }
         };
+
+        // Native SpeechRecognition for instant, zero-latency voice recognition
+        const SpeechRecClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecClass) {
+          try {
+            const recognition = new SpeechRecClass();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event: any) => {
+              let interimText = '';
+              let finalText = '';
+
+              for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                  finalText += event.results[i][0].transcript;
+                } else {
+                  interimText += event.results[i][0].transcript;
+                }
+              }
+
+              if (interimText && !micMutedRef.current) {
+                setSubtitles(`You: "${interimText}..."`);
+              }
+
+              if (finalText.trim() && !micMutedRef.current) {
+                const cleanSpeech = finalText.trim();
+                setSubtitles(`You: "${cleanSpeech}"`);
+                
+                setChatMessages(prev => {
+                  const last = prev[prev.length - 1];
+                  if (last && last.sender === 'user' && last.text === cleanSpeech) return prev;
+                  return [
+                    ...prev,
+                    {
+                      id: `user-speech-${Date.now()}`,
+                      sender: 'user',
+                      text: cleanSpeech,
+                      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      timestamp: Date.now()
+                    }
+                  ];
+                });
+
+                if (ws?.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ text: cleanSpeech, isUserSpeech: true }));
+                }
+              }
+            };
+
+            recognition.onerror = (e: any) => {
+              if (e?.error !== 'no-speech') {
+                console.warn("SpeechRecognition notice:", e?.error);
+              }
+            };
+
+            recognition.onend = () => {
+              if (isActive && !micMutedRef.current) {
+                try { recognition.start(); } catch (_) {}
+              }
+            };
+
+            recognition.start();
+            recognitionRef.current = recognition;
+          } catch (recErr) {
+            console.warn("SpeechRecognition init error:", recErr);
+          }
+        }
 
         ws.onopen = () => {
           if (!isActive) return;
 
           setIsConnected(true);
           toast.success("CareLens Live Connected", {
-            description: "CareLens OT is observing your environment in real-time."
+            description: "Occupational Therapist live voice & camera stream active."
           });
           
+          // Stream camera frames at 1 FPS to avoid saturating Gemini vision limits
           const intervalId = window.setInterval(() => {
             videoIntervalRef.current = intervalId;
-            if (isActive && ws.readyState === WebSocket.OPEN && videoRef.current && canvasRef.current && !videoMutedRef.current) {
+            if (isActive && ws?.readyState === WebSocket.OPEN && videoRef.current && canvasRef.current && !videoMutedRef.current) {
               const video = videoRef.current;
               const canvas = canvasRef.current;
               const ctx = canvas.getContext('2d');
@@ -164,7 +388,7 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                 canvas.width = targetWidth;
                 canvas.height = targetHeight;
                 ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-                const jpegBase64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                const jpegBase64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
                 ws.send(JSON.stringify({ video: jpegBase64 }));
               }
             }
@@ -181,7 +405,6 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
               if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
               speakingTimeoutRef.current = setTimeout(() => setIsAiSpeaking(false), 2500);
 
-              // Log audio activity in transcript if AI text isn't present yet
               setChatMessages((prev) => {
                 const lastMsg = prev[prev.length - 1];
                 if (!lastMsg || lastMsg.sender !== 'ai') {
@@ -206,12 +429,10 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
               const isUserMsg = !!msg.isUser;
               
               if (isUserMsg) {
-                // Show user spoken transcript in live subtitle banner
                 setSubtitles(`You: "${msg.text}"`);
                 if (subtitleTimeoutRef.current) clearTimeout(subtitleTimeoutRef.current);
                 subtitleTimeoutRef.current = setTimeout(() => setSubtitles(""), 6000);
 
-                // Ensure user message is in chat log
                 setChatMessages((prev) => {
                   const lastMsg = prev[prev.length - 1];
                   if (lastMsg && lastMsg.sender === 'user' && lastMsg.text === msg.text) {
@@ -229,7 +450,6 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                   ];
                 });
               } else {
-                // CareLens AI Response
                 const formattedText = msg.text;
                 setSubtitles(formattedText);
                 if (subtitleTimeoutRef.current) clearTimeout(subtitleTimeoutRef.current);
@@ -237,7 +457,6 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
 
                 setChatMessages((prev) => {
                   const lastMsg = prev[prev.length - 1];
-                  // If replacing a placeholder or appending to recent AI turn (< 8s)
                   if (lastMsg && lastMsg.sender === 'ai' && (lastMsg.isPlaceholder || (Date.now() - lastMsg.timestamp) < 8000)) {
                     let mergedText = msg.text;
                     if (!lastMsg.isPlaceholder && lastMsg.text) {
@@ -297,7 +516,7 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
 
       } catch (err) {
         console.error("Error accessing media devices.", err);
-        toast.error("Camera/Microphone access denied. Please allow permissions or open the app in a new tab.");
+        toast.error("Camera or microphone permission was blocked. Please allow browser permissions to use live walkthrough.");
       }
     }
     
@@ -305,24 +524,21 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
 
     return () => {
       isActive = false;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (ws) ws.close();
+      cleanup();
     };
-  }, []);
+  }, [facingMode]);
 
   useEffect(() => {
     if (showChatLog && chatBottomRef.current) {
       chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, showChatLog]);
-  
-  const micMutedRef = useRef(micMuted);
-  const videoMutedRef = useRef(videoMuted);
-  useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
-  useEffect(() => { videoMutedRef.current = videoMuted; }, [videoMuted]);
 
   function playAudioChunk(ctx: AudioContext, base64: string) {
     if (ctx.state === 'suspended') {
-      ctx.resume();
+      ctx.resume().catch(console.error);
     }
     const pcm = base64ToPcm(base64);
     const buffer = ctx.createBuffer(1, pcm.length, 24000);
@@ -340,33 +556,55 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
     nextStartTimeRef.current += buffer.duration;
   }
 
-  function cleanup(specificWs?: WebSocket, specificStream?: MediaStream, specificInterval?: number) {
-    if (specificInterval) clearInterval(specificInterval);
-    else if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+  function cleanup() {
+    if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+    if (wsRef.current) wsRef.current.close();
     
-    if (specificWs) specificWs.close();
-    else if (wsRef.current) wsRef.current.close();
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch (_) {}
+    }
+    if (processorRef.current) {
+      try { processorRef.current.disconnect(); } catch (_) {}
+    }
+    if (sourceRef.current) {
+      try { sourceRef.current.disconnect(); } catch (_) {}
+    }
+    if (muteGainRef.current) {
+      try { muteGainRef.current.disconnect(); } catch (_) {}
+    }
     
-    if (specificStream) {
-      specificStream.getTracks().forEach(t => t.stop());
-    } else if (streamRef.current) {
+    if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
     }
     
     if (inputAudioCtxRef.current && inputAudioCtxRef.current.state !== 'closed') {
-      inputAudioCtxRef.current.close();
+      inputAudioCtxRef.current.close().catch(() => {});
     }
     if (outputAudioCtxRef.current && outputAudioCtxRef.current.state !== 'closed') {
-      outputAudioCtxRef.current.close();
+      outputAudioCtxRef.current.close().catch(() => {});
     }
   }
 
   const toggleMic = () => {
+    resumeAudioContexts();
     if (streamRef.current) {
       const audioTrack = streamRef.current.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
-        setMicMuted(!audioTrack.enabled);
+        const newMuted = !audioTrack.enabled;
+        setMicMuted(newMuted);
+
+        if (recognitionRef.current) {
+          try {
+            if (newMuted) {
+              recognitionRef.current.stop();
+            } else {
+              recognitionRef.current.start();
+            }
+          } catch (_) {}
+        }
+
+        toast.info(!newMuted ? "Microphone active · Speak aloud" : "Microphone muted");
       }
     }
   };
@@ -377,6 +615,7 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setVideoMuted(!videoTrack.enabled);
+        toast.info(!videoTrack.enabled ? "Camera feed active" : "Camera feed paused");
       }
     }
   };
@@ -384,39 +623,107 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
   const switchCamera = async () => {
     const newFacingMode = facingMode === "environment" ? "user" : "environment";
     setFacingMode(newFacingMode);
-    
-    if (streamRef.current) {
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: newFacingMode }
-        });
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        
-        const oldVideoTrack = streamRef.current.getVideoTracks()[0];
-        if (oldVideoTrack) {
-          oldVideoTrack.stop();
-          streamRef.current.removeTrack(oldVideoTrack);
+    toast.info(`Switched to ${newFacingMode === 'environment' ? 'rear surveyor' : 'front'} camera`);
+  };
+
+  // One-tap Hazard Snapshot Capturer
+  const captureHazardSnapshot = async () => {
+    resumeAudioContexts();
+    if (!videoRef.current || videoRef.current.videoWidth === 0) {
+      toast.error("Camera feed not ready to capture");
+      return;
+    }
+
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 200);
+
+    try {
+      setIsSavingSnapshot(true);
+      const video = videoRef.current;
+      const offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = video.videoWidth;
+      offscreenCanvas.height = video.videoHeight;
+      const ctx = offscreenCanvas.getContext('2d');
+      if (!ctx) throw new Error("Could not create canvas context");
+      
+      ctx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+      const photoDataUrl = offscreenCanvas.toDataURL('image/jpeg', 0.85);
+
+      const timestampStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const formattedRoom = roomType ? roomType.charAt(0).toUpperCase() + roomType.slice(1) : 'Room';
+      const snapshotTitle = `${formattedRoom} Hazard · ${timestampStr}`;
+
+      let stagedId: string | undefined;
+
+      // Save to Staging Vault if user is logged in
+      if (user?.uid) {
+        try {
+          stagedId = await addPhoto(user.uid, {
+            fileOrUrl: photoDataUrl,
+            homeId: homeId || 'unassigned-property',
+            roomId: roomId || undefined,
+            roomType: roomType,
+            title: snapshotTitle,
+            notes: "Flagged during live CareLens OT walkthrough.",
+            capturedFrom: 'mobile'
+          });
+        } catch (saveErr) {
+          console.warn("Could not persist to Staging Vault in Firestore:", saveErr);
         }
-        
-        streamRef.current.addTrack(newVideoTrack);
-        newVideoTrack.enabled = !videoMutedRef.current;
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = streamRef.current;
-          videoRef.current.play().catch(console.error);
-        }
-      } catch (e) {
-        console.error("Failed to switch camera", e);
       }
+
+      const newSnapshot: FlaggedSnapshot = {
+        id: `snap-${Date.now()}`,
+        imageUrl: photoDataUrl,
+        timestamp: timestampStr,
+        title: snapshotTitle,
+        stagedId
+      };
+
+      setFlaggedSnapshots(prev => [newSnapshot, ...prev]);
+
+      // Inform parent ScanPage so it can queue it up for the visual safety report
+      if (onSnapshotSaved) {
+        onSnapshotSaved(photoDataUrl);
+      }
+
+      // Proactively notify CareLens OT via live stream to assess the captured hazard
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          text: `I just captured and flagged a physical hazard in this ${roomType}. Please assess what you observe in the frame and advise on what modification or safety equipment is needed.`
+        }));
+
+        setChatMessages(prev => [
+          ...prev,
+          {
+            id: `snap-msg-${Date.now()}`,
+            sender: 'user',
+            text: `[Flagged Hazard Snapshot #${flaggedSnapshots.length + 1} captured in ${roomType}]`,
+            time: timestampStr,
+            timestamp: Date.now()
+          }
+        ]);
+      }
+
+      toast.success(`Hazard Flagged #${flaggedSnapshots.length + 1}`, {
+        description: `Snapshot stored in Photo Library. CareLens OT is evaluating this area.`
+      });
+
+    } catch (err: any) {
+      console.error("Failed to capture snapshot:", err);
+      toast.error("Failed to capture frame: " + (err.message || 'Unknown error'));
+    } finally {
+      setIsSavingSnapshot(false);
     }
   };
 
   const sendTextMessage = (textToSend: string) => {
+    resumeAudioContexts();
     const cleanText = textToSend.trim();
     if (!cleanText) return;
 
     if (cooldownSeconds > 0) {
-      toast.warning(`Please wait ${cooldownSeconds}s before sending another question to prevent spamming.`);
+      toast.warning(`Please wait ${cooldownSeconds}s before sending another prompt.`);
       return;
     }
 
@@ -437,100 +744,191 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
       if (subtitleTimeoutRef.current) clearTimeout(subtitleTimeoutRef.current);
       subtitleTimeoutRef.current = setTimeout(() => setSubtitles(""), 8000);
       setChatInput("");
-
-      // Trigger 3 second anti-spam cooldown
       setCooldownSeconds(3);
     } else {
-      toast.error("CareLens live stream connecting... Please try again in a moment");
+      toast.error("CareLens live stream connecting... Please wait a moment");
     }
   };
 
+  const copyTranscript = () => {
+    if (chatMessages.length === 0) return;
+    const text = chatMessages
+      .map(m => `[${m.time}] ${m.sender === 'user' ? 'Surveyor' : 'CareLens OT'}: ${m.text}`)
+      .join('\n');
+    navigator.clipboard.writeText(text);
+    setHasCopiedTranscript(true);
+    toast.success("Transcript copied to clipboard");
+    setTimeout(() => setHasCopiedTranscript(false), 2000);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-[#0c0e12] font-sans text-foreground flex flex-col select-none">
+    <div 
+      onClick={resumeAudioContexts}
+      className="fixed inset-0 z-50 bg-[#07080b] font-sans text-slate-100 flex flex-col select-none overflow-hidden"
+    >
+      {/* Visual Shutter Flash on Snapshot */}
+      <AnimatePresence>
+        {isFlashing && (
+          <motion.div 
+            initial={{ opacity: 0.9 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 bg-white pointer-events-none z-50"
+          />
+        )}
+      </AnimatePresence>
+
       <div className="flex-1 relative flex flex-col overflow-hidden">
         
-        {/* CareLens Ledger Top Navigation Header */}
-        <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-30 bg-gradient-to-b from-[#0c0e12]/95 via-[#0c0e12]/70 to-transparent border-b border-white/10">
-          <div className="flex items-center gap-2.5">
-            {/* CareLens Brand reticle badge */}
-            <div className="flex items-center gap-2 bg-[#161a22]/90 border border-white/15 px-3 py-1.5 rounded-md backdrop-blur-md shadow-sm">
-              <LensMark className="w-4 h-4 text-brand" />
-              <span className="font-semibold text-xs tracking-tight text-white uppercase">
-                CareLens <span className="text-brand font-normal">Walkthrough</span>
-              </span>
-              <span className="tabular text-[10px] text-brand bg-brand/10 px-1.5 py-0.5 rounded border border-brand/30 ml-1 font-mono">
-                01 · LIVE OT
-              </span>
+        {/* Top Clinical Header Bar */}
+        <header className="absolute top-0 left-0 w-full px-4 py-3.5 flex justify-between items-center z-30 bg-gradient-to-b from-[#07080b]/95 via-[#07080b]/75 to-transparent border-b border-white/10 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            {/* Identity */}
+            <div className="flex items-center gap-2 bg-[#12161f] border border-white/15 px-3 py-1.5 rounded-lg shadow-sm">
+              <LensMark className="w-4 h-4 text-brand shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-semibold text-white tracking-tight">CareLens</span>
+                <span className="text-slate-400 font-normal">Live Walkthrough</span>
+                <span className="text-slate-600 font-mono">·</span>
+                <span className="text-brand font-medium text-[11px] capitalize">{roomType}</span>
+              </div>
             </div>
 
-            {/* Connection & Encryption badge */}
-            <div className="hidden sm:flex items-center gap-2 bg-[#161a22]/70 border border-white/10 px-2.5 py-1.5 rounded-md backdrop-blur text-xs text-slate-300">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-              <span className="text-[11px] font-mono">{isConnected ? "AES-256 STREAM" : "Connecting..."}</span>
-              <Lock className="w-3 h-3 text-slate-500" />
+            {/* Live Audio Input Activity & Decibel Indicator */}
+            <div className={`hidden sm:flex items-center gap-2 border px-2.5 py-1 rounded-lg text-xs transition-colors backdrop-blur ${
+              micMuted 
+                ? 'bg-rose-950/40 border-rose-500/30 text-rose-300' 
+                : micLevel > 12 
+                  ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-200 shadow-xs shadow-emerald-500/20' 
+                  : 'bg-[#12161f]/80 border-white/10 text-slate-300'
+            }`}>
+              {micMuted ? (
+                <>
+                  <MicOff className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="text-[11px] font-mono">Mic Muted</span>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-end gap-0.5 h-3.5 w-4" title="Microphone volume activity">
+                    <span 
+                      className={`w-0.5 rounded-xs transition-all duration-75 ${micLevel > 15 ? 'bg-emerald-400' : 'bg-slate-500'}`} 
+                      style={{ height: `${Math.max(20, Math.min(100, micLevel * 1.5))}%` }} 
+                    />
+                    <span 
+                      className={`w-0.5 rounded-xs transition-all duration-75 ${micLevel > 25 ? 'bg-emerald-400' : 'bg-slate-500'}`} 
+                      style={{ height: `${Math.max(30, Math.min(100, micLevel * 2.2))}%` }} 
+                    />
+                    <span 
+                      className={`w-0.5 rounded-xs transition-all duration-75 ${micLevel > 35 ? 'bg-emerald-400' : 'bg-slate-500'}`} 
+                      style={{ height: `${Math.max(15, Math.min(100, micLevel * 1.8))}%` }} 
+                    />
+                    <span 
+                      className={`w-0.5 rounded-xs transition-all duration-75 ${micLevel > 50 ? 'bg-emerald-400' : 'bg-slate-500'}`} 
+                      style={{ height: `${Math.max(20, Math.min(100, micLevel * 2.6))}%` }} 
+                    />
+                  </div>
+                  <span className="text-[11px] font-mono">
+                    {micLevel > 12 ? `Voice Active (${micLevel}%)` : 'Listening...'}
+                  </span>
+                </>
+              )}
             </div>
 
-            {/* Audio output active indicator */}
+            {/* AI Voice Output Indicator */}
             {isAiSpeaking && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="inline-flex items-center gap-1.5 bg-brand/20 text-brand border border-brand/40 px-2.5 py-1 rounded-md text-xs font-medium backdrop-blur shadow-sm"
+                className="inline-flex items-center gap-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-1 rounded-lg text-xs font-medium backdrop-blur shadow-sm"
               >
-                <Volume2 className="w-3.5 h-3.5 animate-pulse text-brand" />
-                <span className="text-[11px]">OT Speaking...</span>
+                <Volume2 className="w-3.5 h-3.5 animate-pulse text-amber-400" />
+                <span className="text-[11px]">OT Voice Streaming</span>
               </motion.div>
             )}
           </div>
 
+          {/* Right Header Actions */}
           <div className="flex items-center gap-2">
+            {/* Flagged Hazards Pill */}
+            {flaggedSnapshots.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSnapshotsDrawer(!showSnapshotsDrawer)}
+                className="rounded-lg text-xs gap-1.5 bg-[#12161f] border-amber-500/40 text-amber-300 hover:bg-[#1a2130] h-8"
+              >
+                <Camera className="w-3.5 h-3.5 text-amber-400" />
+                <span>Hazards Flagged ({flaggedSnapshots.length})</span>
+              </Button>
+            )}
+
+            {/* Transcript Ledger Button */}
             <Button 
               variant="outline" 
               size="sm"
               onClick={() => setShowChatLog(!showChatLog)} 
-              className={`rounded-md text-xs gap-1.5 backdrop-blur-md transition-all shadow-sm h-8 ${
+              className={`rounded-lg text-xs gap-1.5 backdrop-blur-md transition-all shadow-sm h-8 ${
                 showChatLog 
                   ? 'bg-brand text-brand-foreground border-brand' 
-                  : 'bg-[#161a22]/90 text-white border-white/20 hover:border-brand/60'
+                  : 'bg-[#12161f] text-slate-200 border-white/15 hover:border-brand/60'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>{showChatLog ? "Close Ledger" : `Transcript (${chatMessages.length})`}</span>
+              <span>Transcript</span>
+              <span className="text-[10px] font-mono text-slate-400">({chatMessages.length})</span>
             </Button>
 
+            {/* Exit Session Button */}
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={onClose} 
-              className="text-slate-300 hover:text-white hover:bg-white/10 rounded-md h-8 w-8 transition-colors"
+              className="text-slate-300 hover:text-white hover:bg-white/10 rounded-lg h-8 w-8 transition-colors"
               title="Close Walkthrough"
             >
               <X className="w-4 h-4" />
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* Live Camera Viewport with Surveyor Reticles */}
-        <div className="flex-1 bg-[#07080a] relative flex items-center justify-center overflow-hidden">
-          {/* Surveyor Grid Overlay */}
-          <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:36px_36px] z-10" />
+        {/* Viewport & Surveyor Video Canvas */}
+        <div className="flex-1 bg-[#06070a] relative flex items-center justify-center overflow-hidden">
+          
+          {/* Subtle Grid Reticle Texture */}
+          <div className="absolute inset-0 pointer-events-none opacity-[0.06] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:40px_40px] z-10" />
 
-          {/* Surveyor Crosshair Corner Ticks */}
-          <div className="absolute top-16 left-6 w-6 h-6 border-t-2 border-l-2 border-brand/70 pointer-events-none z-20" />
-          <div className="absolute top-16 right-6 w-6 h-6 border-t-2 border-r-2 border-brand/70 pointer-events-none z-20" />
-          <div className="absolute bottom-36 left-6 w-6 h-6 border-b-2 border-l-2 border-brand/70 pointer-events-none z-20" />
-          <div className="absolute bottom-36 right-6 w-6 h-6 border-b-2 border-r-2 border-brand/70 pointer-events-none z-20" />
+          {/* Clinical Reticle Corner Brackets */}
+          <div className="absolute top-16 left-6 w-8 h-8 border-t-2 border-l-2 border-brand/60 pointer-events-none z-20" />
+          <div className="absolute top-16 right-6 w-8 h-8 border-t-2 border-r-2 border-brand/60 pointer-events-none z-20" />
+          <div className="absolute bottom-32 left-6 w-8 h-8 border-b-2 border-l-2 border-brand/60 pointer-events-none z-20" />
+          <div className="absolute bottom-32 right-6 w-8 h-8 border-b-2 border-r-2 border-brand/60 pointer-events-none z-20" />
 
-          {/* Telemetry Badge */}
-          <div className="absolute top-20 left-8 z-20 pointer-events-none flex items-center gap-2">
-            <div className="bg-[#161a22]/80 border border-white/10 px-2.5 py-1 rounded text-[10px] font-mono text-slate-300 flex items-center gap-2 backdrop-blur">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand animate-ping" />
-              <span>LENS: {facingMode.toUpperCase()}</span>
-              <span className="text-slate-600">|</span>
-              <span>1 FPS</span>
+          {/* Center Surveyor Crosshair */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 opacity-40">
+            <div className="relative w-16 h-16 flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full border border-brand/80" />
+              <div className="absolute top-0 w-0.5 h-3 bg-brand/80" />
+              <div className="absolute bottom-0 w-0.5 h-3 bg-brand/80" />
+              <div className="absolute left-0 h-0.5 w-3 bg-brand/80" />
+              <div className="absolute right-0 h-0.5 w-3 bg-brand/80" />
             </div>
           </div>
 
+          {/* Real Telemetry Bar */}
+          <div className="absolute top-18 left-8 z-20 pointer-events-none flex items-center gap-2">
+            <div className="bg-[#0f131a]/85 border border-white/10 px-3 py-1 rounded-md text-[11px] font-mono text-slate-300 flex items-center gap-2.5 backdrop-blur shadow-sm">
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span>{isConnected ? "LIVE STREAM ACTIVE" : "CONNECTING..."}</span>
+              <span className="text-slate-600">·</span>
+              <span>{cameraResolution.width > 0 ? `${cameraResolution.width}x${cameraResolution.height}` : '720p'}</span>
+              <span className="text-slate-600">·</span>
+              <span>1 FPS VISION</span>
+              <span className="text-slate-600">·</span>
+              <span>16kHz PCM</span>
+            </div>
+          </div>
+
+          {/* Main Video Surface */}
           <video 
             ref={videoRef} 
             autoPlay 
@@ -540,34 +938,40 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
           />
           
           {videoMuted && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-3 bg-[#0c0e12]">
-              <LensMarkBadge size="lg" className="bg-[#161a22] text-slate-400 border border-white/10" />
-              <p className="text-xs font-mono text-slate-300 uppercase tracking-wider">Camera Feed Suspended</p>
-              <p className="text-xs text-slate-500">Tap camera button below to reactivate feed</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-3 bg-[#0a0d13]">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400">
+                <VideoOff className="w-7 h-7 text-slate-500" />
+              </div>
+              <p className="text-sm font-semibold text-white tracking-wide">Camera Feed Paused</p>
+              <p className="text-xs text-slate-400">Click the video button below to reactivate camera</p>
             </div>
           )}
 
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Real-time CareLens Subtitle Banner */}
+          {/* Real-time Subtitle & Voice Banner */}
           <AnimatePresence>
             {(subtitles || isAiSpeaking) && !showChatLog && (
               <motion.div 
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="absolute bottom-40 inset-x-0 px-4 flex justify-center z-20 pointer-events-none"
+                className="absolute bottom-36 inset-x-0 px-4 flex justify-center z-20 pointer-events-none"
               >
-                 <div className={`px-5 py-3 rounded-md max-w-xl text-center text-xs sm:text-sm backdrop-blur-xl shadow-lg border leading-relaxed font-sans ${
+                 <div className={`px-5 py-3 rounded-xl max-w-xl text-center text-xs sm:text-sm backdrop-blur-xl shadow-xl border leading-relaxed font-sans ${
                    subtitles.startsWith('You:') 
-                     ? 'bg-[#0f2820]/95 text-emerald-100 border-emerald-500/40' 
-                     : 'bg-[#161a22]/95 text-white border-brand/30'
+                     ? 'bg-[#0b1f18]/95 text-emerald-100 border-emerald-500/40 shadow-emerald-950/40' 
+                     : 'bg-[#12161f]/95 text-white border-brand/40 shadow-brand/10'
                  }`}>
-                    <div className="flex items-center justify-center gap-1 text-[10px] uppercase font-mono mb-1 tracking-wider">
+                    <div className="flex items-center justify-center gap-1.5 text-[10px] uppercase font-mono mb-1 tracking-wider">
                       {subtitles.startsWith('You:') ? (
-                        <span className="text-emerald-400 flex items-center gap-1 font-semibold"><User className="w-3 h-3" /> User Spoke</span>
+                        <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                          <User className="w-3 h-3" /> Voice Recognized
+                        </span>
                       ) : (
-                        <span className="text-brand flex items-center gap-1"><LensMark className="w-3 h-3" /> OT Guidance</span>
+                        <span className="text-brand flex items-center gap-1 font-semibold">
+                          <LensMark className="w-3 h-3" /> CareLens OT Specialist
+                        </span>
                       )}
                     </div>
                     {subtitles ? (
@@ -583,30 +987,96 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
             )}
           </AnimatePresence>
 
-          {/* CareLens Live Transcript Drawer Panel */}
+          {/* Flagged Hazard Snapshots Drawer */}
+          <AnimatePresence>
+            {showSnapshotsDrawer && (
+              <motion.aside
+                initial={{ opacity: 0, x: -80 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -80 }}
+                className="absolute left-4 top-16 bottom-32 w-80 sm:w-88 bg-[#0f131a]/95 border border-white/15 rounded-xl p-4 backdrop-blur-2xl z-30 flex flex-col shadow-2xl text-slate-100"
+              >
+                <div className="flex justify-between items-center pb-3 border-b border-white/10 mb-3">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-white">
+                      Flagged Hazards ({flaggedSnapshots.length})
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setShowSnapshotsDrawer(false)}
+                    className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-white/5"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-sm scrollbar-thin scrollbar-thumb-slate-800">
+                  {flaggedSnapshots.length === 0 ? (
+                    <div className="text-center text-slate-500 py-12 text-xs">
+                      No hazards flagged yet. Tap the shutter button below when you see an obstacle or fall hazard.
+                    </div>
+                  ) : (
+                    flaggedSnapshots.map((snap, idx) => (
+                      <div 
+                        key={snap.id}
+                        className="p-2.5 rounded-lg border border-white/10 bg-[#07090e] hover:border-brand/40 transition-all flex gap-3 items-center"
+                      >
+                        <div className="w-16 h-12 rounded bg-black overflow-hidden shrink-0 border border-white/10">
+                          <img src={snap.imageUrl} alt={snap.title} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-white truncate">{snap.title}</p>
+                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">{snap.timestamp}</p>
+                          <span className="text-[10px] text-emerald-400 flex items-center gap-1 mt-0.5">
+                            <CheckCircle2 className="w-3 h-3" /> Saved to Photo Library
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+
+          {/* Transcript Ledger Drawer */}
           <AnimatePresence>
             {showChatLog && (
-              <motion.div
+              <motion.aside
                 initial={{ opacity: 0, x: 80 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 80 }}
-                className="absolute right-4 top-16 bottom-36 w-80 sm:w-96 bg-[#161a22]/95 border border-white/15 rounded-lg p-4 backdrop-blur-2xl z-30 flex flex-col shadow-2xl text-slate-100"
+                className="absolute right-4 top-16 bottom-32 w-80 sm:w-96 bg-[#0f131a]/95 border border-white/15 rounded-xl p-4 backdrop-blur-2xl z-30 flex flex-col shadow-2xl text-slate-100"
               >
                 <div className="flex justify-between items-center pb-3 border-b border-white/10 mb-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-brand flex items-center gap-1.5 font-mono">
-                    <LensMark className="w-4 h-4 text-brand" /> Transcript Ledger
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <LensMark className="w-4 h-4 text-brand" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-white">
+                      Live Transcript Ledger
+                    </span>
+                  </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {chatMessages.length > 0 && (
-                      <button 
-                        onClick={() => setChatMessages([])} 
-                        className="text-xs text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1 px-2 py-1 rounded hover:bg-white/5"
-                        title="Clear log"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Clear</span>
-                      </button>
+                      <>
+                        <button 
+                          onClick={copyTranscript}
+                          className="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-1 px-2 py-1 rounded hover:bg-white/5"
+                          title="Copy transcript"
+                        >
+                          {hasCopiedTranscript ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{hasCopiedTranscript ? "Copied" : "Copy"}</span>
+                        </button>
+                        <button 
+                          onClick={() => setChatMessages([])} 
+                          className="text-xs text-slate-400 hover:text-rose-400 transition-colors flex items-center gap-1 px-2 py-1 rounded hover:bg-white/5"
+                          title="Clear transcript"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Clear</span>
+                        </button>
+                      </>
                     )}
                     <button 
                       onClick={() => setShowChatLog(false)} 
@@ -619,10 +1089,14 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                 
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-sm scrollbar-thin scrollbar-thumb-slate-800">
                   {chatMessages.length === 0 ? (
-                    <div className="text-center text-slate-500 my-auto py-12 text-xs flex flex-col items-center gap-2">
-                      <LensMarkBadge size="md" className="bg-[#0c0e12] text-brand border border-white/10" />
-                      <p className="font-medium text-slate-300">Transcript ledger empty</p>
-                      <p className="text-[11px] text-slate-500 max-w-xs">Speak aloud or tap the OT prompts below to log real-time environmental observations.</p>
+                    <div className="text-center text-slate-400 my-auto py-12 text-xs flex flex-col items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                        <Mic className="w-5 h-5 text-brand" />
+                      </div>
+                      <p className="font-semibold text-white">Transcript Ledger Empty</p>
+                      <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
+                        Speak aloud into your microphone or tap the clinical prompts below. Both your spoken questions and CareLens OT guidance are logged in real time.
+                      </p>
                     </div>
                   ) : (
                     chatMessages.map((m) => (
@@ -633,23 +1107,23 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1 px-1 font-mono">
                           {m.sender === 'user' ? (
                             <>
-                              <span className="text-brand font-medium">Surveyor (You)</span>
-                              <User className="w-3 h-3 text-brand" />
+                              <span className="text-emerald-400 font-medium">Surveyor (You)</span>
+                              <User className="w-3 h-3 text-emerald-400" />
                             </>
                           ) : (
                             <>
                               <LensMark className="w-3 h-3 text-brand" />
-                              <span className="text-white font-medium">CareLens OT Specialist</span>
+                              <span className="text-white font-medium">CareLens OT</span>
                             </>
                           )}
-                          <span>• {m.time}</span>
+                          <span>· {m.time}</span>
                         </div>
                         
                         <div 
-                          className={`px-3.5 py-2.5 rounded-md max-w-[88%] text-xs sm:text-sm leading-relaxed ${
+                          className={`px-3.5 py-2.5 rounded-lg max-w-[88%] text-xs sm:text-sm leading-relaxed ${
                             m.sender === 'user' 
-                              ? 'bg-brand/20 text-white border border-brand/30' 
-                              : 'bg-[#0c0e12]/90 text-slate-100 border border-white/10'
+                              ? 'bg-emerald-950/40 text-emerald-100 border border-emerald-500/30' 
+                              : 'bg-[#07090e] text-slate-100 border border-white/10'
                           }`}
                         >
                           {m.isPlaceholder ? (
@@ -666,34 +1140,34 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                   )}
                   <div ref={chatBottomRef} />
                 </div>
-              </motion.div>
+              </motion.aside>
             )}
           </AnimatePresence>
 
-          {/* Bottom CareLens Control Bar */}
-          <div className="absolute bottom-5 inset-x-0 px-4 flex flex-col items-center gap-3 z-20 max-w-2xl mx-auto">
+          {/* Bottom Clinical Control Console */}
+          <div className="absolute bottom-4 inset-x-0 px-4 flex flex-col items-center gap-2.5 z-20 max-w-3xl mx-auto">
             
-            {/* Contextual OT Suggestions Chips */}
+            {/* Quick Clinical Observation Prompts */}
             <div className="flex flex-wrap justify-center gap-1.5 px-2">
-              {OT_SUGGESTIONS.map((chip) => (
+              {CLINICAL_OBSERVATION_PROMPTS.map((chip) => (
                 <button
                   key={chip.label}
                   type="button"
                   disabled={cooldownSeconds > 0}
                   onClick={() => sendTextMessage(chip.label)}
-                  className={`border rounded-md px-3 py-1.5 text-xs backdrop-blur-md transition-all flex items-center gap-1.5 shadow-sm ${
+                  className={`border rounded-lg px-2.5 py-1 text-xs backdrop-blur-md transition-all flex items-center gap-1.5 shadow-xs ${
                     cooldownSeconds > 0 
-                      ? 'bg-[#161a22]/50 text-slate-500 border-white/5 cursor-not-allowed opacity-60' 
-                      : 'bg-[#161a22]/90 hover:bg-[#1f2636] text-slate-200 hover:text-white border-white/15 hover:border-brand/50 active:scale-95'
+                      ? 'bg-[#12161f]/50 text-slate-500 border-white/5 cursor-not-allowed opacity-60' 
+                      : 'bg-[#12161f]/90 hover:bg-[#1a2130] text-slate-200 hover:text-white border-white/15 hover:border-brand/50 active:scale-95'
                   }`}
                 >
                   <span className="text-xs">{chip.emoji}</span>
-                  <span>{chip.label}</span>
+                  <span className="font-medium text-[11px]">{chip.label}</span>
                 </button>
               ))}
             </div>
 
-            {/* Input Form with Anti-Spam Rate Limiter */}
+            {/* Observation Text Input Bar */}
             <form 
               onSubmit={(e) => {
                 e.preventDefault();
@@ -710,12 +1184,12 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                   placeholder={
                     cooldownSeconds > 0 
                       ? `Rate limit active... wait ${cooldownSeconds}s` 
-                      : "Type an observation or ask CareLens OT to inspect a hazard..."
+                      : "Type an environmental question or speak into your microphone..."
                   } 
-                  className={`w-full border text-white placeholder-slate-400 rounded-md px-4 py-2 text-xs sm:text-sm outline-none transition-all backdrop-blur-md shadow-sm ${
+                  className={`w-full border text-white placeholder-slate-400 rounded-xl px-4 py-2 text-xs sm:text-sm outline-none transition-all backdrop-blur-md shadow-sm ${
                     cooldownSeconds > 0 
-                      ? 'bg-[#161a22]/60 border-white/5 text-slate-500 cursor-not-allowed' 
-                      : 'bg-[#161a22]/90 border-white/20 focus:border-brand focus:ring-1 focus:ring-brand'
+                      ? 'bg-[#12161f]/60 border-white/5 text-slate-500 cursor-not-allowed' 
+                      : 'bg-[#12161f]/90 border-white/15 focus:border-brand focus:ring-1 focus:ring-brand'
                   }`}
                 />
               </div>
@@ -723,10 +1197,10 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
               <Button 
                 type="submit" 
                 disabled={!chatInput.trim() || cooldownSeconds > 0}
-                className={`rounded-md px-4 h-9 transition-all shadow-sm font-medium text-xs sm:text-sm ${
+                className={`rounded-xl px-4 h-9.5 transition-all shadow-sm font-semibold text-xs sm:text-sm ${
                   cooldownSeconds > 0 
                     ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed" 
-                    : "bg-brand hover:brightness-105 text-brand-foreground"
+                    : "bg-brand hover:brightness-105 text-brand-foreground cursor-pointer"
                 }`}
               >
                 {cooldownSeconds > 0 ? (
@@ -737,61 +1211,84 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
                 ) : (
                   <>
                     <Send className="w-3.5 h-3.5 sm:mr-1.5" />
-                    <span className="hidden sm:inline">Send</span>
+                    <span className="hidden sm:inline">Ask OT</span>
                   </>
                 )}
               </Button>
             </form>
 
-            {/* Media Action Buttons */}
-            <div className="flex justify-center items-center gap-3 mt-0.5">
-              <Button
-                variant="secondary"
-                size="icon"
-                className={`w-10 h-10 rounded-md shadow-sm transition-all ${
-                  micMuted 
-                    ? 'bg-rose-600/90 text-white hover:bg-rose-600 border border-rose-500' 
-                    : 'bg-[#161a22]/90 hover:bg-[#1f2636] text-slate-100 border border-white/15'
-                }`}
+            {/* Primary Shutter & Media Controls Bar */}
+            <div className="flex justify-center items-center gap-4 mt-0.5">
+              
+              {/* Mic Toggle Button with Real Decibel Feedback */}
+              <button
+                type="button"
                 onClick={toggleMic}
+                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-md relative ${
+                  micMuted 
+                    ? 'bg-rose-600/90 text-white hover:bg-rose-600 border border-rose-400' 
+                    : micLevel > 15
+                      ? 'bg-emerald-600 text-white border-2 border-emerald-400 shadow-emerald-500/40 ring-4 ring-emerald-500/20'
+                      : 'bg-[#161c28] hover:bg-[#202738] text-slate-200 border border-white/20'
+                }`}
                 title={micMuted ? "Unmute Microphone" : "Mute Microphone"}
               >
-                {micMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-brand" />}
-              </Button>
+                {micMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
               
-              <Button
-                variant="destructive"
-                className="h-10 px-5 rounded-md shadow-sm bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs sm:text-sm flex items-center gap-2"
-                onClick={onClose}
-                title="End Walkthrough Session"
-              >
-                <X className="w-4 h-4" />
-                <span>End Walkthrough</span>
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="icon"
-                className={`w-10 h-10 rounded-md shadow-sm transition-all ${
-                  videoMuted 
-                    ? 'bg-rose-600/90 text-white hover:bg-rose-600 border border-rose-500' 
-                    : 'bg-slate-900/80 hover:bg-slate-800 text-slate-100 border border-slate-700 backdrop-blur'
+              {/* Central ONE-TAP HAZARD SNAPSHOT Shutter Button */}
+              <button
+                type="button"
+                disabled={isSavingSnapshot || videoMuted}
+                onClick={captureHazardSnapshot}
+                className={`h-12 px-6 rounded-full shadow-lg transition-all flex items-center gap-2.5 font-semibold text-xs sm:text-sm border ${
+                  videoMuted
+                    ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black border-amber-300/80 active:scale-95 shadow-amber-500/20'
                 }`}
-                onClick={toggleVideo}
-                title={videoMuted ? "Turn On Video" : "Turn Off Video"}
+                title="Flag this hazard and capture snapshot"
               >
-                {videoMuted ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4 text-brand" />}
-              </Button>
+                <div className="w-3.5 h-3.5 rounded-full bg-black/80 flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                </div>
+                <Camera className="w-4 h-4 text-black" strokeWidth={2.2} />
+                <span>Flag Hazard Photo</span>
+              </button>
 
-              <Button
-                variant="secondary"
-                size="icon"
-                className="w-10 h-10 rounded-md bg-[#161a22]/90 hover:bg-[#1f2636] text-slate-100 border border-white/15 shadow-sm"
-                onClick={switchCamera}
-                title="Switch Camera"
+              {/* Video Pause / Resume Button */}
+              <button
+                type="button"
+                onClick={toggleVideo}
+                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-md ${
+                  videoMuted 
+                    ? 'bg-rose-600/90 text-white hover:bg-rose-600 border border-rose-400' 
+                    : 'bg-[#161c28] hover:bg-[#202738] text-slate-200 border border-white/20'
+                }`}
+                title={videoMuted ? "Turn On Camera" : "Pause Camera"}
               >
-                <SwitchCamera className="w-4 h-4" />
-              </Button>
+                {videoMuted ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+              </button>
+
+              {/* Camera Switcher Button */}
+              <button
+                type="button"
+                onClick={switchCamera}
+                className="w-11 h-11 rounded-full bg-[#161c28] hover:bg-[#202738] text-slate-200 border border-white/20 flex items-center justify-center transition-all shadow-md active:rotate-180 duration-300"
+                title="Switch Camera (Front / Rear)"
+              >
+                <SwitchCamera className="w-5 h-5" />
+              </button>
+
+              {/* End Session Button */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-11 h-11 rounded-full bg-white/10 hover:bg-rose-600/80 text-slate-300 hover:text-white border border-white/15 flex items-center justify-center transition-all shadow-md ml-1"
+                title="End Walkthrough"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
             </div>
 
           </div>
@@ -800,5 +1297,3 @@ export function LiveWalkthrough({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
-

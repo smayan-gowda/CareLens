@@ -97,28 +97,23 @@ service cloud.firestore {
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
     
+    function isSampleDoc(data) {
+      return data == null || !('userId' in data) || data.userId == 'demo-user' || data.userId == 'demo' || data.userId == 'sample';
+    }
+
     match /scans/{scanId} {
-      allow read: if isSignedIn() && (
-        ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
-        ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
-      );
-      allow list: if isSignedIn();
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isSampleDoc(resource.data) || scanId.matches('^sample-.*'));
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSampleDoc(resource.data));
       allow create: if isSignedIn() && isValidScan(incoming());
-      allow update: if isSignedIn() && (
-        ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
-        ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
-      ) && isValidScan(incoming());
-      allow delete: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        !('userId' in resource.data) ||
-        ('homeId' in resource.data && exists(/databases/$(database)/documents/homes/$(resource.data.homeId)) && get(/databases/$(database)/documents/homes/$(resource.data.homeId)).data.userId == request.auth.uid)
-      );
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == existing().userId && isValidScan(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid && !isSampleDoc(existing());
     }
     
     match /activities/{activityId} {
       allow read: if isSignedIn() && existing().userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidActivity(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
     
     match /timelineEvents/{eventId} {
@@ -146,30 +141,12 @@ service cloud.firestore {
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
-    match /posts/{postId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && existing().authorId == request.auth.uid;
-    }
-
-    match /comments/{commentId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && existing().authorId == request.auth.uid;
-    }
-
-    match /likes/{likeId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
-    }
-
     match /stagedPhotos/{photoId} {
-      allow read: if isSignedIn() && existing().userId == request.auth.uid;
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid || isSampleDoc(resource.data) || photoId.matches('^sample-.*'));
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSampleDoc(resource.data));
       allow create: if isSignedIn() && isValidStagedPhoto(incoming());
-      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidStagedPhoto(incoming());
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == existing().userId && isValidStagedPhoto(incoming());
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid && !isSampleDoc(existing());
     }
   }
 }

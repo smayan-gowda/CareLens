@@ -25,6 +25,11 @@ export interface SafetyAnalysis {
     category: string;
     severity: "Critical" | "High" | "Medium" | "Low";
     description: string;
+    visibleObservation?: string;
+    potentialConcern?: string;
+    verificationRequirement?: string;
+    limitations?: string;
+    suggestedNextStep?: string;
     location: string;
     confidence: number;
     objectsInvolved: string[];
