@@ -23,6 +23,7 @@ import { ReportTimelineSection } from "@/components/reports/ReportTimelineSectio
 import { getSampleAssessment } from "@/data/sampleAssessments";
 import type { Hazard, ScanResult } from "@/types/ai";
 import { getScoreFormulaBreakdown } from "@/components/reports/reportMath";
+import { analyzeSpatialRelationships } from "@/services/ai/spatialAnalyzer";
 
 export function ReportPage() {
   const { homeId, roomId, reportId } = useParams();
@@ -181,7 +182,12 @@ export function ReportPage() {
 
         <ExecutiveSummary scan={dynamicScan} />
 
-        <SpatialFindings findings={dynamicScan.spatialFindings || []} />
+        <SpatialFindings
+          findings={
+            dynamicScan.spatialFindings ??
+            analyzeSpatialRelationships(dynamicScan.detectedObjects || [])
+          }
+        />
 
         <KeyFindings
           hazards={activeHazards}
