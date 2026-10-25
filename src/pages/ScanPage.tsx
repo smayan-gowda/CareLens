@@ -30,6 +30,7 @@ import { QrHandoffModal } from "@/components/vault/QrHandoffModal";
 import type { ScanResult } from "@/types/ai";
 import { StagedPhoto } from "@/types/home";
 import { SAMPLE_ASSESSMENTS } from "@/data/sampleAssessments";
+import { analyzeSpatialRelationships } from "@/services/ai/spatialAnalyzer";
 import { processImageForStorage } from "@/services/storageService";
 
 export function ScanPage() {
@@ -322,6 +323,28 @@ export function ScanPage() {
                         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                           {sample.subtitle}
                         </p>
+                        {(() => {
+                          const findings = analyzeSpatialRelationships(
+                            sample.scanResult.detectedObjects || []
+                          );
+                          return (
+                            <div className="pt-2 text-xs text-muted-foreground">
+                              <p className="font-medium text-foreground">
+                                Spatial review: {findings.length} image-based relationship
+                                {findings.length === 1 ? "" : "s"}
+                              </p>
+                              {findings.length > 0 && (
+                                <p className="mt-1 line-clamp-2">
+                                  {findings
+                                    .slice(0, 2)
+                                    .map((finding) => finding.objectsInvolved.join(" + "))
+                                    .join(" · ")}
+                                  {findings.length > 2 ? " · …" : ""}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
