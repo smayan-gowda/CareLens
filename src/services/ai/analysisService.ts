@@ -4,6 +4,7 @@ import { extractHazards } from './safetyAnalyzer';
 import { generateRecommendations } from './recommendationGenerator';
 import { compressImageDataUrl } from '@/utils/imageCompression';
 import { getScoreFormulaBreakdown } from '@/components/reports/reportMath';
+import { analyzeSpatialRelationships } from './spatialAnalyzer';
 
 async function getBase64FromUrl(url: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
@@ -117,6 +118,7 @@ export const analysisService = {
 
       const hazards = extractHazards(result, scanId);
       const recommendations = generateRecommendations(result, hazards);
+      const spatialFindings = analyzeSpatialRelationships(detectedObjects);
 
       if (onProgress) onProgress(6, 100);
 
@@ -139,6 +141,7 @@ export const analysisService = {
         roomType: result.roomType,
         roomConfidence: result.confidence,
         detectedObjects,
+        spatialFindings,
         hazards,
         recommendations,
         assessmentTrace: {

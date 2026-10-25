@@ -78,6 +78,32 @@ export interface DetectedObject {
   boundingBox?: BoundingBox;
 }
 
+export type SpatialEvidenceStatus =
+  | 'Observed'
+  | 'Geometrically Supported'
+  | 'Potential Concern'
+  | 'Needs Review'
+  | 'Physically Unverified';
+
+export type SpatialRelationType =
+  | 'proximity'
+  | 'overlap'
+  | 'duplicate-detection'
+  | 'walkway-overlap'
+  | 'doorway-proximity'
+  | 'obstacle-destination';
+
+export interface SpatialFinding {
+  id: string;
+  relationType: SpatialRelationType;
+  objectsInvolved: string[];
+  objectIds: string[];
+  geometricEvidence: string;
+  confidence: number;
+  evidenceStatus: SpatialEvidenceStatus;
+  limitations: string;
+}
+
 export interface SubScores {
   accessibility: number;
   mobility: number;
@@ -101,6 +127,7 @@ export interface ScanResult {
   roomType?: string;
   roomConfidence?: number;
   detectedObjects?: DetectedObject[];
+  spatialFindings?: SpatialFinding[];
   hazards: Hazard[];
   recommendations: Recommendation[];
   assessmentTrace?: AssessmentTrace;

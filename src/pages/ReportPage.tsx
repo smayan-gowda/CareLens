@@ -10,6 +10,7 @@ import { OverallScoreCard } from "@/components/reports/OverallScoreCard";
 import { ExecutiveSummary } from "@/components/reports/ExecutiveSummary";
 import { CategoryBreakdown } from "@/components/reports/CategoryBreakdown";
 import { KeyFindings } from "@/components/reports/KeyFindings";
+import { SpatialFindings } from "@/components/reports/SpatialFindings";
 import { RecommendationBlocks } from "@/components/reports/RecommendationBlocks";
 import { BeforeAfterPreview } from "@/components/reports/BeforeAfterPreview";
 import { ReportAnalytics } from "@/components/reports/ReportAnalytics";
@@ -179,6 +180,8 @@ export function ReportPage() {
         <OverallScoreCard scan={dynamicScan} previousScore={previousScore} />
 
         <ExecutiveSummary scan={dynamicScan} />
+
+        <SpatialFindings findings={dynamicScan.spatialFindings || []} />
 
         <KeyFindings
           hazards={activeHazards}
