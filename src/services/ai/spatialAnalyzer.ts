@@ -5,6 +5,7 @@ import type {
   SpatialFinding,
   SpatialRelationType,
 } from '@/types/ai';
+import { normalizeBoundingBox } from '@/utils/spatialGeometry';
 
 const PROXIMITY_THRESHOLD = 6;
 const DOORWAY_PROXIMITY_THRESHOLD = 4;
@@ -15,22 +16,6 @@ const BASE_LIMITATIONS =
 interface PositionedObject {
   object: DetectedObject;
   box: BoundingBox;
-}
-
-function isValidBox(box: BoundingBox | undefined): box is BoundingBox {
-  return Boolean(
-    box &&
-      Number.isFinite(box.x) &&
-      Number.isFinite(box.y) &&
-      Number.isFinite(box.width) &&
-      Number.isFinite(box.height) &&
-      box.x >= 0 &&
-      box.y >= 0 &&
-      box.width > 0 &&
-      box.height > 0 &&
-      box.x + box.width <= 100 &&
-      box.y + box.height <= 100
-  );
 }
 
 function normalizedName(name: string): string {
@@ -110,11 +95,10 @@ function boxEvidence(objects: PositionedObject[]): string {
 }
 
 export function analyzeSpatialRelationships(detectedObjects: DetectedObject[]): SpatialFinding[] {
-  const positioned = detectedObjects
-    .filter((object): object is DetectedObject & { boundingBox: BoundingBox } =>
-      isValidBox(object.boundingBox)
-    )
-    .map((object) => ({ object, box: object.boundingBox }));
+  const positioned = detectedObjects.flatMap((object) => {
+    const box = normalizeBoundingBox(object.boundingBox);
+    return box ? [{ object, box }] : [];
+  });
   const findings: SpatialFinding[] = [];
 
   for (let i = 0; i < positioned.length; i++) {

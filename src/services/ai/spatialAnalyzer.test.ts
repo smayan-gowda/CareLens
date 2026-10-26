@@ -3,18 +3,34 @@ import { analyzeSpatialRelationships } from './spatialAnalyzer';
 import { evalDataset } from './evalDataset';
 
 describe('analyzeSpatialRelationships', () => {
-  it('matches every labeled relation in the local evaluation dataset', () => {
-    for (const evaluationCase of evalDataset) {
+  it('matches labeled relations for synthetic cases without intentional detector failures', () => {
+    for (const evaluationCase of evalDataset.filter(
+      (item) =>
+        !item.difficulty?.includes('missed by the detector') &&
+        !item.difficulty?.includes('false object detection')
+    )) {
+      const groundTruthObjects =
+        evaluationCase.groundTruthObjects ?? evaluationCase.detectedObjects;
       const actual = analyzeSpatialRelationships(evaluationCase.detectedObjects).map((finding) => ({
         relationType: finding.relationType,
-        objectIds: [...finding.objectIds].sort(),
+        objectNames: finding.objectIds
+          .map((id) => evaluationCase.detectedObjects.find((object) => object.id === id)?.name ?? id)
+          .sort(),
         evidenceStatus: finding.evidenceStatus,
       }));
-      const expected = evaluationCase.expectedRelations.map((relation) => ({
-        relationType: relation.relationType,
-        objectIds: [...relation.objectIds].sort(),
-        evidenceStatus: relation.evidenceStatus,
-      }));
+      const expected = evaluationCase.expectedRelations
+        .map((relation) => ({
+          relationType: relation.relationType,
+          objectNames: relation.objectIds
+            .map((id) => groundTruthObjects.find((object) => object.id === id)?.name ?? id)
+            .sort(),
+          evidenceStatus: relation.evidenceStatus,
+        }))
+        .filter((relation) =>
+          relation.objectNames.every((name) =>
+            evaluationCase.detectedObjects.some((object) => object.name === name)
+          )
+        );
 
       expect(actual, evaluationCase.id).toEqual(expected);
     }
@@ -41,5 +57,15 @@ describe('analyzeSpatialRelationships', () => {
     });
     expect(findings[0].geometricEvidence).toContain('image-coordinate');
     expect(findings[0].limitations).toContain('real-world distance');
+  });
+
+  it('uses the same normalized geometry for fractional-coordinate detections', () => {
+    const findings = analyzeSpatialRelationships([
+      { id: 'chair', name: 'Chair', confidence: 90, boundingBox: { x: 0.1, y: 0.1, width: 0.15, height: 0.15 } },
+      { id: 'table', name: 'Table', confidence: 90, boundingBox: { x: 0.3, y: 0.1, width: 0.15, height: 0.15 } },
+    ]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].geometricEvidence).toContain('Chair [10, 10, 15, 15]');
   });
 });

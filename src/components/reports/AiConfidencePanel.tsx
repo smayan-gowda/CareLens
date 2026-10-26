@@ -14,7 +14,7 @@ export function AiConfidencePanel({ confidence = 88, trace, className }: AiConfi
     { label: 'Room Coverage', value: 78, note: 'Adequate' },
   ];
 
-  const modelName = trace?.model || 'gemini-2.5-flash';
+  const modelName = trace?.pipeline?.photos[0]?.selectedModel || trace?.model || 'gemini-2.5-flash';
   const rulesVer = trace?.rulesVersion || '2.4.0';
   const engineVer = trace?.engineVersion || 'carelens-deterministic-v2';
   const evaluatedTime = trace?.evaluatedAt ? new Date(trace.evaluatedAt).toLocaleString() : new Date().toLocaleDateString();
@@ -68,6 +68,46 @@ export function AiConfidencePanel({ confidence = 88, trace, className }: AiConfi
               Evaluated at <span className="text-foreground font-medium">{evaluatedTime}</span>. Scores derived deterministically from candidate findings and physical validation state.
             </p>
           </div>
+
+          {trace?.pipeline && (
+            <details className="border-t border-border pt-3 text-xs">
+              <summary className="cursor-pointer font-medium text-foreground">
+                Scan pipeline record
+                <span className="ml-2 font-normal text-muted-foreground">
+                  {trace.pipeline.photos.length} photo{trace.pipeline.photos.length === 1 ? '' : 's'} · {trace.pipeline.persistenceStatus}
+                </span>
+              </summary>
+              <div className="mt-3 space-y-3">
+                {trace.pipeline.photos.map((photo) => (
+                  <div key={photo.imageId} className="rounded-md border border-border p-3 space-y-1.5">
+                    <div className="font-medium text-foreground">{photo.label} <span className="font-normal text-muted-foreground">({photo.role})</span></div>
+                    <div className="text-muted-foreground">
+                      {photo.mimeType}{photo.byteLength !== undefined ? ` · ${photo.byteLength.toLocaleString()} bytes` : ''}
+                      {photo.sha256 ? ` · SHA-256 ${photo.sha256.slice(0, 12)}…` : ''}
+                    </div>
+                    <div className="text-muted-foreground">
+                      Model: {photo.selectedModel || 'not selected'}
+                      {photo.reportedModelVersion ? ` · version ${photo.reportedModelVersion}` : ''}
+                      {' · '}parse {photo.parseStatus}, validation {photo.validationStatus}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {photo.modelAttempts.length} model attempt{photo.modelAttempts.length === 1 ? '' : 's'}
+                      {photo.modelAttempts.map((attempt, index) => (
+                        <span key={`${attempt.model}-${attempt.attempt}`}>
+                          {index === 0 ? ': ' : ' · '}
+                          {attempt.model} #{attempt.attempt} {attempt.outcome}
+                          {attempt.errorCode ? ` (${attempt.errorCode})` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[11px] text-muted-foreground">
+                  The fingerprint is metadata only; original image bytes and credentials are not included in this trace.
+                </p>
+              </div>
+            </details>
+          )}
         </div>
 
         <div className="p-3 bg-muted/30 border border-border/80 rounded-lg flex items-start gap-2.5 text-[11px] text-muted-foreground">

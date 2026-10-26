@@ -20,14 +20,42 @@ import { AiConfidencePanel } from "@/components/reports/AiConfidencePanel";
 import { ReportFooter } from "@/components/reports/ReportFooter";
 import { InteractiveImage } from "@/components/reports/InteractiveImage";
 import { ReportTimelineSection } from "@/components/reports/ReportTimelineSection";
+import { AssessmentComparison } from "@/components/reports/AssessmentComparison";
+import { EvidenceJourney } from "@/components/reports/EvidenceJourney";
 import { getSampleAssessment } from "@/data/sampleAssessments";
-import type { Hazard, ScanResult } from "@/types/ai";
+import type { EvidenceReview, EvidenceReviewStatus, Hazard, ScanResult } from "@/types/ai";
 import { getScoreFormulaBreakdown } from "@/components/reports/reportMath";
 import { analyzeSpatialRelationships } from "@/services/ai/spatialAnalyzer";
+import type { SpatialFindingReviewStatus } from "@/types/ai";
+import { toast } from "sonner";
+
+function createLocalReview(
+  targetType: EvidenceReview["targetType"],
+  targetId: string,
+  status: EvidenceReviewStatus,
+  imageId?: string
+): EvidenceReview {
+  return {
+    id: `review-${crypto.randomUUID()}`,
+    targetType,
+    targetId,
+    status,
+    origin: "user",
+    reviewedAt: new Date().toISOString(),
+    imageId,
+  };
+}
 
 export function ReportPage() {
   const { homeId, roomId, reportId } = useParams();
-  const { getScanById, getScansForRoom, updateHazardFeedback, loading: scanLoading } = useScanStore();
+  const {
+    scans,
+    getScanById,
+    getScansForRoom,
+    updateHazardFeedback,
+    updateSpatialFindingReview,
+    loading: scanLoading,
+  } = useScanStore();
   const { homes, loading: homeLoading } = useHomeStore();
 
   // Check store first, fallback to sample assessment data
@@ -47,24 +75,206 @@ export function ReportPage() {
   }, [reportId, rawScan]);
 
   const [activeHazards, setActiveHazards] = useState<Hazard[]>([]);
+  const [activeEvidenceReviews, setActiveEvidenceReviews] = useState<EvidenceReview[]>([]);
   const [selectedHazardId, setSelectedHazardId] = useState<string | null>(null);
+  const [activeSpatialFindings, setActiveSpatialFindings] = useState<NonNullable<ScanResult["spatialFindings"]>>([]);
+  const [selectedSpatialFindingId, setSelectedSpatialFindingId] = useState<string | null>(null);
+  const [selectedPhotoId, setSelectedPhotoId] = useState("");
+  const [selectedObservationIds, setSelectedObservationIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (rawScan?.hazards) {
       setActiveHazards(rawScan.hazards);
+      setSelectedHazardId(rawScan.hazards[0]?.id ?? null);
     }
+    setActiveEvidenceReviews(rawScan?.evidenceReviews ?? []);
   }, [rawScan]);
 
-  const handleFeedbackChange = (
+  const initialSpatialFindings = useMemo(
+    () => rawScan?.spatialFindings ?? analyzeSpatialRelationships(rawScan?.detectedObjects || []),
+    [rawScan]
+  );
+
+  useEffect(() => {
+    setActiveSpatialFindings(initialSpatialFindings);
+  }, [initialSpatialFindings]);
+
+  const handleFeedbackChange = async (
     hazardId: string,
     feedback: "helpful" | "not_present" | "needs_review"
   ) => {
+    const previousHazard = activeHazards.find((item) => item.id === hazardId);
     setActiveHazards((prev) =>
       prev.map((h) => (h.id === hazardId ? { ...h, feedback } : h))
     );
-    if (rawScan?.id) {
-      updateHazardFeedback(rawScan.id, hazardId, feedback);
+    const status: EvidenceReviewStatus =
+      feedback === "helpful" ? "confirmed" : feedback === "not_present" ? "disputed" : "needs_review";
+    try {
+      const review =
+        isSample || !rawScan?.id
+          ? createLocalReview("hazard", hazardId, status, previousHazard?.imageId)
+          : await updateHazardFeedback(rawScan.id, hazardId, feedback);
+      if (review) {
+        setActiveEvidenceReviews((reviews) => [...reviews, review]);
+        setActiveHazards((hazards) =>
+          hazards.map((hazard) =>
+            hazard.id === hazardId
+              ? {
+                  ...hazard,
+                  reviewStatus: status,
+                  reviewIds: [...(hazard.reviewIds ?? []), review.id],
+                }
+              : hazard
+          )
+        );
+      }
+    } catch {
+      setActiveHazards((hazards) =>
+        hazards.map((hazard) =>
+          hazard.id === hazardId && previousHazard ? previousHazard : hazard
+        )
+      );
+      toast.error("Couldn't save your review. Please try again.");
     }
+  };
+
+  const handleSelectHazard = (hazardId: string | null) => {
+    setSelectedHazardId(hazardId);
+    if (!hazardId) {
+      setSelectedObservationIds([]);
+      return;
+    }
+    setSelectedSpatialFindingId(null);
+    const hazard = activeHazards.find((item) => item.id === hazardId);
+    if (hazard?.imageId) setSelectedPhotoId(hazard.imageId);
+    setSelectedObservationIds(hazard?.observationIds ?? []);
+  };
+
+  const handleSelectPhoto = (photoId: string) => {
+    setSelectedPhotoId(photoId);
+    setSelectedHazardId(null);
+    setSelectedSpatialFindingId(null);
+    setSelectedObservationIds([]);
+  };
+
+  const handleOpenPhotoEvidence = (photoId: string) => {
+    handleSelectPhoto(photoId);
+    document.getElementById("images")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
+
+  const handleReviewPhotoFinding = (
+    photoId: string,
+    hazardId?: string,
+    spatialFindingId?: string
+  ) => {
+    setSelectedPhotoId(photoId);
+    if (hazardId) {
+      handleSelectHazard(hazardId);
+      document.getElementById("findings")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+    if (spatialFindingId) {
+      handleOpenSpatialFinding(spatialFindingId);
+      return;
+    }
+    handleOpenPhotoEvidence(photoId);
+  };
+
+  const handleOpenActionPlan = () => {
+    document.getElementById("recommendations")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const handleSelectObservations = (observationIds: string[], photoId?: string) => {
+    if (photoId) setSelectedPhotoId(photoId);
+    setSelectedHazardId(null);
+    setSelectedSpatialFindingId(null);
+    setSelectedObservationIds(observationIds);
+    document.getElementById("images")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  };
+
+  const handleSpatialReviewChange = async (
+    findingId: string,
+    reviewStatus: Exclude<SpatialFindingReviewStatus, "unreviewed">
+  ) => {
+    if (isSample) {
+      const finding = activeSpatialFindings.find((item) => item.id === findingId);
+      const review = createLocalReview(
+        "spatial-finding",
+        findingId,
+        reviewStatus,
+        finding?.imageId
+      );
+      setActiveSpatialFindings((findings) =>
+        findings.map((finding) =>
+          finding.id === findingId
+            ? { ...finding, reviewStatus, reviewIds: [...(finding.reviewIds ?? []), review.id] }
+            : finding
+        )
+      );
+      setActiveEvidenceReviews((reviews) => [...reviews, review]);
+      return;
+    }
+
+    if (!rawScan?.id) return;
+    try {
+      const review = await updateSpatialFindingReview(
+        rawScan.id,
+        findingId,
+        reviewStatus,
+        activeSpatialFindings
+      );
+      if (review) setActiveEvidenceReviews((reviews) => [...reviews, review]);
+      setActiveSpatialFindings((findings) =>
+        findings.map((finding) =>
+          finding.id === findingId
+            ? {
+                ...finding,
+                reviewStatus,
+                reviewIds: review
+                  ? [...(finding.reviewIds ?? []), review.id]
+                  : finding.reviewIds,
+              }
+            : finding
+        )
+      );
+    } catch {
+      toast.error("Couldn't save your review. Please try again.");
+    }
+  };
+
+  const handleSelectSpatialFinding = (findingId: string | null) => {
+    setSelectedSpatialFindingId(findingId);
+    if (findingId) {
+      const finding = activeSpatialFindings.find((item) => item.id === findingId);
+      if (finding?.imageId) setSelectedPhotoId(finding.imageId);
+      setSelectedObservationIds(finding?.objectIds ?? []);
+      setSelectedHazardId(null);
+      document.getElementById("images")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
+  const handleOpenSpatialFinding = (findingId: string) => {
+    setSelectedSpatialFindingId(findingId);
+    const finding = activeSpatialFindings.find((item) => item.id === findingId);
+    if (finding?.imageId) setSelectedPhotoId(finding.imageId);
+    setSelectedObservationIds(finding?.objectIds ?? []);
+    setSelectedHazardId(null);
+    document.getElementById("spatial-findings")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   };
 
   const calculatedScore = useMemo(() => {
@@ -80,13 +290,50 @@ export function ReportPage() {
       ...rawScan,
       safetyScore: calculatedScore,
       hazards: activeHazards,
+      spatialFindings: activeSpatialFindings,
+      evidenceReviews: activeEvidenceReviews,
     };
-  }, [rawScan, calculatedScore, activeHazards]);
+  }, [rawScan, calculatedScore, activeHazards, activeSpatialFindings, activeEvidenceReviews]);
+
+  const reportPhotos = useMemo(
+    () =>
+      (dynamicScan?.images || []).map((image, index) => ({
+        ...(dynamicScan.photos?.[index] || {
+          id: `legacy-photo-${dynamicScan.id}-${index}`,
+          role: index === 0 ? ("overview" as const) : ("detail" as const),
+          label: index === 0 ? "Room overview" : `Photo ${index + 1}`,
+        }),
+        image,
+      })),
+    [dynamicScan]
+  );
+  const activePhoto = reportPhotos.find((photo) => photo.id === selectedPhotoId) || reportPhotos[0];
+
+  useEffect(() => {
+    if (reportPhotos.length > 0 && !reportPhotos.some((photo) => photo.id === selectedPhotoId)) {
+      setSelectedPhotoId(reportPhotos[0].id);
+    }
+  }, [reportPhotos, selectedPhotoId]);
 
   const currentHome = homes.find((h) => h.id === homeId);
   const currentRoom = currentHome?.rooms.find((r) => r.id === roomId);
 
   const roomScans = useMemo(() => getScansForRoom(roomId || ""), [getScansForRoom, roomId]);
+  const comparisonSourceScan = useMemo(() => {
+    if (!dynamicScan) return undefined;
+    const scansInStore = Object.values(scans).flat();
+    if (dynamicScan.followUpFromScanId) {
+      return (
+        getScanById(dynamicScan.followUpFromScanId) ??
+        scansInStore.find((scan) => scan.id === dynamicScan.followUpFromScanId)
+      );
+    }
+    return scansInStore.find((scan) =>
+      scan.recommendations?.some(
+        (recommendation) => recommendation.followUpScanId === dynamicScan.id
+      )
+    );
+  }, [dynamicScan, getScanById, scans]);
 
   const previousScore = useMemo(() => {
     if (!dynamicScan) return undefined;
@@ -129,6 +376,14 @@ export function ReportPage() {
   }
 
   const mainImage = dynamicScan.images?.[0] || (dynamicScan as any).originalImage;
+  const activePhotoIndex = Math.max(
+    0,
+    reportPhotos.findIndex((photo) => photo.id === activePhoto?.id)
+  );
+  const photoScoped = <T extends { imageId?: string }>(items: T[]) =>
+    items.filter(
+      (item) => item.imageId === activePhoto?.id || (!item.imageId && activePhotoIndex === 0)
+    );
 
   const oneLiner =
     dynamicScan.hazards.filter((h) => h.feedback !== "not_present").length === 0
@@ -180,22 +435,47 @@ export function ReportPage() {
       <div className="max-w-5xl mx-auto px-5 md:px-10 space-y-16 md:space-y-24 py-16 md:py-20">
         <OverallScoreCard scan={dynamicScan} previousScore={previousScore} />
 
+        {comparisonSourceScan && (
+          <AssessmentComparison before={comparisonSourceScan} after={dynamicScan} />
+        )}
+
         <ExecutiveSummary scan={dynamicScan} />
 
-        <SpatialFindings
-          findings={
-            dynamicScan.spatialFindings ??
-            analyzeSpatialRelationships(dynamicScan.detectedObjects || [])
-          }
+        <EvidenceJourney
+          photos={reportPhotos}
           detectedObjects={dynamicScan.detectedObjects || []}
+          spatialFindings={activeSpatialFindings}
+          hazards={activeHazards}
+          recommendations={dynamicScan.recommendations}
+          evidenceReviews={activeEvidenceReviews}
+          onOpenPhoto={handleOpenPhotoEvidence}
+          onReviewPhoto={handleReviewPhotoFinding}
+          onOpenActionPlan={handleOpenActionPlan}
+        />
+
+        <SpatialFindings
+          findings={activeSpatialFindings}
+          detectedObjects={dynamicScan.detectedObjects || []}
+          evidenceReviews={activeEvidenceReviews}
+          photos={reportPhotos}
+          selectedPhotoId={activePhoto?.id || ""}
+          onSelectPhoto={handleSelectPhoto}
+          selectedFindingId={selectedSpatialFindingId}
+          onSelectFinding={handleSelectSpatialFinding}
+          onReviewChange={handleSpatialReviewChange}
         />
 
         <KeyFindings
           hazards={activeHazards}
           recommendations={dynamicScan.recommendations}
           image={mainImage}
+          photos={reportPhotos}
+          spatialFindings={activeSpatialFindings}
+          evidenceReviews={activeEvidenceReviews}
           selectedHazardId={selectedHazardId}
-          onSelectHazard={setSelectedHazardId}
+          onSelectHazard={handleSelectHazard}
+          onSelectSpatialFinding={handleOpenSpatialFinding}
+          onSelectObservations={handleSelectObservations}
           detectedObjects={dynamicScan.detectedObjects}
           onFeedbackChange={handleFeedbackChange}
         />
@@ -203,21 +483,28 @@ export function ReportPage() {
         <div id="images" className="scroll-mt-24 space-y-10">
           <span className="field-tag text-muted-foreground block">Interactive Image & Bounding Boxes</span>
           <InteractiveImage
-            image={mainImage}
+            image={activePhoto?.image || mainImage}
+            photoId={activePhoto?.id}
+            photos={reportPhotos}
+            onSelectPhoto={handleSelectPhoto}
             hazards={activeHazards.filter((h) => h.feedback !== "not_present")}
             detectedObjects={dynamicScan.detectedObjects}
+            spatialFindings={activeSpatialFindings}
             selectedHazardId={selectedHazardId}
-            onSelectHazard={setSelectedHazardId}
+            onSelectHazard={handleSelectHazard}
+            selectedObservationIds={selectedObservationIds}
+            selectedSpatialFindingId={selectedSpatialFindingId}
+            onSelectSpatialFinding={setSelectedSpatialFindingId}
           />
 
           <div className="grid md:grid-cols-2 gap-10 pt-4">
             <div>
               <span className="field-tag text-muted-foreground block mb-4">Improvement Visualization</span>
               <BeforeAfterPreview
-                originalImage={mainImage}
-                recommendations={dynamicScan.recommendations}
-                hazards={activeHazards}
-                detectedObjects={dynamicScan.detectedObjects}
+                originalImage={activePhoto?.image || mainImage}
+                recommendations={photoScoped(dynamicScan.recommendations)}
+                hazards={photoScoped(activeHazards)}
+                detectedObjects={photoScoped(dynamicScan.detectedObjects || [])}
               />
             </div>
             <div>
@@ -236,6 +523,16 @@ export function ReportPage() {
           recommendations={dynamicScan.recommendations}
           currentScore={dynamicScan.safetyScore}
           scanId={dynamicScan.id}
+          homeId={dynamicScan.homeId}
+          roomId={dynamicScan.roomId}
+          photos={reportPhotos}
+          hazards={activeHazards}
+          detectedObjects={dynamicScan.detectedObjects || []}
+          spatialFindings={activeSpatialFindings}
+          onSelectPhoto={handleSelectPhoto}
+          onSelectHazard={handleSelectHazard}
+          onSelectSpatialFinding={handleOpenSpatialFinding}
+          onSelectObservations={handleSelectObservations}
         />
 
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-stretch pt-16 border-t border-border">

@@ -84,11 +84,15 @@ export function getScoreFormulaBreakdown(hazards: Hazard[]): ScoreFormulaBreakdo
   };
 }
 
-/** How much finishing remaining open recommendations could plausibly raise the
- * score — excludes already completed recommendations. */
+/** Illustrative score scenario only; action statuses never modify measured scores. */
 export function projectedScore(currentScore: number, recommendations: Recommendation[]): number {
   if (!recommendations || recommendations.length === 0) return currentScore;
-  const pending = recommendations.filter((r) => !r.completedAt);
+  const pending = recommendations.filter((recommendation) => {
+    const status =
+      recommendation.actionStatus ??
+      (recommendation.completedAt ? 'follow_up_due' : 'open');
+    return status !== 'dismissed' && status !== 'verified';
+  });
   if (pending.length === 0) return currentScore;
   const gain = pending.reduce((sum, r) => sum + (r.expectedImpact || 0), 0);
   return Math.min(100, Math.round(currentScore + gain));

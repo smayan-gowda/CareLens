@@ -173,7 +173,13 @@ export function RoomDetailPage() {
         </div>
 
         {latestScan && (
-          <RecommendationBlocks recommendations={latestScan.recommendations} currentScore={latestScan.safetyScore} scanId={latestScan.id} />
+          <RecommendationBlocks
+            recommendations={latestScan.recommendations}
+            currentScore={latestScan.safetyScore}
+            scanId={latestScan.id}
+            homeId={home.id}
+            roomId={room.id}
+          />
         )}
 
         <RoomTimelineSection roomScans={roomScans} timelineEvents={timelineEvents} />

@@ -108,6 +108,16 @@ service cloud.firestore {
       allow update: if isSignedIn() && existing().userId == request.auth.uid && incoming().userId == existing().userId && isValidScan(incoming());
       allow delete: if isSignedIn() && existing().userId == request.auth.uid && !isSampleDoc(existing());
     }
+
+    match /scanPipelineTraces/{scanId} {
+      allow read, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && incoming().userId == request.auth.uid
+        && incoming().scanId == scanId
+        && incoming().status == 'failed'
+        && incoming().schemaVersion == 1;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
     
     match /activities/{activityId} {
       allow read: if isSignedIn() && existing().userId == request.auth.uid;
@@ -150,4 +160,3 @@ service cloud.firestore {
     }
   }
 }
-

@@ -15,7 +15,14 @@ import {
   ShieldCheck,
   UserCheck
 } from "lucide-react";
-import type { Hazard, Recommendation, DetectedObject } from "@/types/ai";
+import type {
+  DetectedObject,
+  EvidenceReview,
+  Hazard,
+  Recommendation,
+  ScanPhoto,
+  SpatialFinding,
+} from "@/types/ai";
 import { severityColor, severityLabel, estimatedImprovement } from "./reportMath";
 
 function getEvidenceStateBadge(hazard: Hazard): { label: string; style: string } {
@@ -35,8 +42,13 @@ interface KeyFindingsProps {
   hazards: Hazard[];
   recommendations: Recommendation[];
   image?: string;
+  photos?: Array<ScanPhoto & { image: string }>;
+  spatialFindings?: SpatialFinding[];
+  evidenceReviews?: EvidenceReview[];
   selectedHazardId: string | null;
   onSelectHazard: (id: string | null) => void;
+  onSelectSpatialFinding?: (id: string) => void;
+  onSelectObservations?: (observationIds: string[], photoId?: string) => void;
   detectedObjects?: DetectedObject[];
   onFeedbackChange?: (hazardId: string, feedback: "helpful" | "not_present" | "needs_review") => void;
 }
@@ -107,8 +119,13 @@ export function KeyFindings({
   hazards,
   recommendations,
   image,
+  photos = [],
+  spatialFindings = [],
+  evidenceReviews = [],
   selectedHazardId,
   onSelectHazard,
+  onSelectSpatialFinding,
+  onSelectObservations,
   detectedObjects = [],
   onFeedbackChange,
 }: KeyFindingsProps) {
@@ -136,6 +153,10 @@ export function KeyFindings({
           {hazards.length} item{hazards.length !== 1 ? "s" : ""} identified
         </span>
       </div>
+      <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+        Select a finding to see what the photo shows, why it may matter, what the image cannot confirm,
+        and a practical next check. Your review is separate from the model&apos;s finding.
+      </p>
 
       {/* Preliminary guidance banner */}
       <div className="p-4 bg-muted/30 border border-border rounded-xl flex items-start gap-3 text-xs text-muted-foreground">
@@ -154,8 +175,33 @@ export function KeyFindings({
         {hazards.map((hazard, idx) => {
           const isExpanded = selectedHazardId === hazard.id;
           const improvement = estimatedImprovement(hazard, recommendations);
-          const resolvedBox = resolveHazardBox(hazard, detectedObjects);
-          const feedback = hazard.feedback;
+          const evidencePhoto = photos.find((photo) => photo.id === hazard.imageId);
+          const evidencePhotoIndex = evidencePhoto ? photos.indexOf(evidencePhoto) : 0;
+          const evidenceObjects = detectedObjects.filter(
+            (object) =>
+              object.imageId === hazard.imageId ||
+              (!object.imageId && evidencePhotoIndex === 0)
+          );
+          const resolvedBox = resolveHazardBox(hazard, evidenceObjects);
+          const linkedObservations = evidenceObjects.filter((object) =>
+            hazard.observationIds?.includes(object.id)
+          );
+          const linkedFindings = spatialFindings.filter((finding) =>
+            hazard.spatialFindingIds?.includes(finding.id)
+          );
+          const hazardReviews = evidenceReviews.filter(
+            (review) => review.targetType === "hazard" && review.targetId === hazard.id
+          );
+          const feedback = hazardReviews.length > 0
+            ? {
+                confirmed: "helpful",
+                disputed: "not_present",
+                needs_review: "needs_review",
+              }[hazardReviews[hazardReviews.length - 1].status]
+            : hazard.feedback === "needs_review"
+              ? undefined
+              : hazard.feedback;
+          const legacyReviewState = hazardReviews.length === 0 && hazard.feedback === "needs_review";
           const isNotPresent = feedback === "not_present";
 
           return (
@@ -173,7 +219,7 @@ export function KeyFindings({
                   onClick={() => onSelectHazard(isExpanded ? null : hazard.id)}
                 >
                   <div className="aspect-[4/3] w-full overflow-hidden bg-neutral-900 rounded-lg border border-border/80 relative">
-                    <FindingImage image={image} box={resolvedBox} />
+                    <FindingImage image={evidencePhoto?.image || image} box={resolvedBox} />
                     {resolvedBox && (
                       <span className="absolute bottom-2 right-2 text-[10px] font-mono bg-black/70 text-white/90 px-2 py-0.5 rounded backdrop-blur-sm">
                         Area Annotated
@@ -198,6 +244,11 @@ export function KeyFindings({
                         </span>
                         <span className="w-1 h-1 rounded-full bg-border" />
                         <span className="field-tag text-muted-foreground">{hazard.category}</span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {hazard.provenance?.origin === "vision-model"
+                            ? "Vision model"
+                            : "Source not recorded"}
+                        </span>
 
                         {isNotPresent && (
                           <span className="text-[11px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
@@ -230,6 +281,11 @@ export function KeyFindings({
                       <span className="text-muted-foreground font-medium">Where: </span>
                       <span className="text-foreground">{hazard.location}</span>
                     </div>
+                    {evidencePhoto && photos.length > 1 && (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        Evidence photo: <span className="font-medium text-foreground">{evidencePhoto.label}</span>
+                      </p>
+                    )}
                     <div>
                       <span className="text-muted-foreground font-medium">Potential Concern: </span>
                       <span className="text-foreground">{hazard.potentialConcern || hazard.impact}</span>
@@ -239,7 +295,9 @@ export function KeyFindings({
                   {/* Human feedback controls */}
                   <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-border/40">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground font-medium mr-1">User review:</span>
+                      <span className="text-xs text-muted-foreground font-medium mr-1">
+                        Your review · does not change the score:
+                      </span>
                       <Button
                         size="sm"
                         variant={feedback === "helpful" ? "secondary" : "outline"}
@@ -249,7 +307,7 @@ export function KeyFindings({
                         onClick={() => onFeedbackChange?.(hazard.id, "helpful")}
                       >
                         <ThumbsUp className="w-3 h-3" />
-                        <span>Confirmed</span>
+                        <span>Looks right</span>
                       </Button>
                       <Button
                         size="sm"
@@ -260,7 +318,7 @@ export function KeyFindings({
                         onClick={() => onFeedbackChange?.(hazard.id, "not_present")}
                       >
                         <XCircle className="w-3 h-3" />
-                        <span>Disputed (Not Present)</span>
+                        <span>Not present</span>
                       </Button>
                       <Button
                         size="sm"
@@ -271,7 +329,7 @@ export function KeyFindings({
                         onClick={() => onFeedbackChange?.(hazard.id, "needs_review")}
                       >
                         <AlertCircle className="w-3 h-3" />
-                        <span>Unresolved</span>
+                        <span>Needs review</span>
                       </Button>
                     </div>
 
@@ -279,6 +337,11 @@ export function KeyFindings({
                       <span className="text-success font-medium">+{improvement} pts</span> if addressed
                     </div>
                   </div>
+                  {legacyReviewState && (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      This scan has a legacy unresolved state, but no review event was saved to identify its source.
+                    </p>
+                  )}
 
                   {/* Expanded evidence and physical verification notes */}
                   <AnimatePresence>
@@ -349,6 +412,80 @@ export function KeyFindings({
                                   ))}
                                 </div>
                               </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-6 rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+                          <div>
+                            <p className="font-semibold text-foreground">Evidence trail</p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Hazard record <code>{hazard.id}</code>
+                              {hazard.provenance?.createdAt &&
+                                ` · model output ${new Date(hazard.provenance.createdAt).toLocaleString()}`}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="mb-1 font-medium text-foreground">Linked visual observations</p>
+                            {linkedObservations.length > 0 ? (
+                              <ul className="space-y-1 text-muted-foreground">
+                                {linkedObservations.map((object) => (
+                                  <li key={object.id} className="flex flex-wrap items-center gap-2">
+                                    <code className="text-[10px]">{object.id}</code>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-auto px-1 py-0 text-xs"
+                                      onClick={() =>
+                                        onSelectObservations?.([object.id], hazard.imageId)
+                                      }
+                                    >
+                                      Locate {object.name} in photo
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-muted-foreground">
+                                No detected-object record was explicitly linked to this hazard.
+                              </p>
+                            )}
+                          </div>
+                          {linkedFindings.length > 0 && (
+                            <div>
+                              <p className="mb-1 font-medium text-foreground">Linked geometric findings</p>
+                              <div className="flex flex-wrap gap-2">
+                                {linkedFindings.map((finding) => (
+                                  <Button
+                                    key={finding.id}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => onSelectSpatialFinding?.(finding.id)}
+                                  >
+                                    {finding.relationType.replaceAll("-", " ")}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div>
+                            <p className="mb-1 font-medium text-foreground">User review history</p>
+                            {hazardReviews.length > 0 ? (
+                              <ul className="space-y-1 text-muted-foreground">
+                                {hazardReviews.map((review) => (
+                                  <li key={review.id}>
+                                    User {review.status.replaceAll("_", " ")} ·{" "}
+                                    {new Date(review.reviewedAt).toLocaleString()}
+                                    {review.note ? ` · ${review.note}` : ""}
+                                    <code className="ml-1 text-[10px]">{review.id}</code>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-muted-foreground">
+                                No explicit user-review event is stored for this scan.
+                              </p>
                             )}
                           </div>
                         </div>

@@ -1,8 +1,19 @@
-import type { BoundingBox, DetectedObject, SpatialFinding } from '@/types/ai';
+import type { DetectedObject, EvidenceReview, ScanPhoto, SpatialFinding } from '@/types/ai';
+import type { SpatialFindingReviewStatus } from '@/types/ai';
+import { Button } from '@/components/ui/button';
+import { AlertCircle, Check, Eye, XCircle } from 'lucide-react';
+import { normalizeBoundingBox } from '@/utils/spatialGeometry';
 
 interface SpatialFindingsProps {
   findings: SpatialFinding[];
   detectedObjects: DetectedObject[];
+  evidenceReviews: EvidenceReview[];
+  photos: Array<ScanPhoto & { image: string }>;
+  selectedPhotoId: string;
+  onSelectPhoto: (id: string) => void;
+  selectedFindingId: string | null;
+  onSelectFinding: (id: string | null) => void;
+  onReviewChange: (findingId: string, reviewStatus: Exclude<SpatialFindingReviewStatus, 'unreviewed'>) => void;
 }
 
 const statusStyles: Record<SpatialFinding['evidenceStatus'], string> = {
@@ -22,22 +33,6 @@ const relationLabels: Record<SpatialFinding['relationType'], string> = {
   'obstacle-destination': 'Possible relationship between an obstacle and a visible destination',
 };
 
-function isValidBox(box: BoundingBox | undefined): box is BoundingBox {
-  return Boolean(
-    box &&
-      Number.isFinite(box.x) &&
-      Number.isFinite(box.y) &&
-      Number.isFinite(box.width) &&
-      Number.isFinite(box.height) &&
-      box.x >= 0 &&
-      box.y >= 0 &&
-      box.width > 0 &&
-      box.height > 0 &&
-      box.x + box.width <= 100 &&
-      box.y + box.height <= 100
-  );
-}
-
 function SpatialMap({
   findings,
   detectedObjects,
@@ -45,11 +40,13 @@ function SpatialMap({
   findings: SpatialFinding[];
   detectedObjects: DetectedObject[];
 }) {
-  const objectsById = new Map(detectedObjects.map((object) => [object.id, object]));
-  const mappedObjects = detectedObjects.filter(
-    (object): object is DetectedObject & { boundingBox: BoundingBox } =>
-      isValidBox(object.boundingBox)
+  const boxesById = new Map(
+    detectedObjects.map((object) => [object.id, normalizeBoundingBox(object.boundingBox)])
   );
+  const mappedObjects = detectedObjects.flatMap((object) => {
+    const box = boxesById.get(object.id);
+    return box ? [{ object, box }] : [];
+  });
 
   if (mappedObjects.length === 0) return null;
 
@@ -89,9 +86,9 @@ function SpatialMap({
           >
             {findings.map((finding) => {
               const [firstId, secondId] = finding.objectIds;
-              const first = objectsById.get(firstId)?.boundingBox;
-              const second = objectsById.get(secondId)?.boundingBox;
-              if (!isValidBox(first) || !isValidBox(second)) return null;
+              const first = boxesById.get(firstId);
+              const second = boxesById.get(secondId);
+              if (!first || !second) return null;
               return (
                 <line
                   key={finding.id}
@@ -107,8 +104,7 @@ function SpatialMap({
               );
             })}
           </svg>
-          {mappedObjects.map((object, index) => {
-            const box = object.boundingBox!;
+          {mappedObjects.map(({ object, box }, index) => {
             const hasRelation = findings.some((finding) => finding.objectIds.includes(object.id));
             return (
               <div
@@ -120,10 +116,10 @@ function SpatialMap({
                     : "border-muted-foreground/45 bg-muted-foreground/5"
                 }`}
                 style={{
-                  left: `${object.boundingBox.x}%`,
-                  top: `${object.boundingBox.y}%`,
-                  width: `${object.boundingBox.width}%`,
-                  height: `${object.boundingBox.height}%`,
+                  left: `${box.x}%`,
+                  top: `${box.y}%`,
+                  width: `${box.width}%`,
+                  height: `${box.height}%`,
                   minWidth: "3px",
                   minHeight: "3px",
                 }}
@@ -166,9 +162,27 @@ function SpatialMap({
   );
 }
 
-export function SpatialFindings({ findings, detectedObjects }: SpatialFindingsProps) {
+export function SpatialFindings({
+  findings,
+  detectedObjects,
+  evidenceReviews,
+  photos,
+  selectedPhotoId,
+  onSelectPhoto,
+  selectedFindingId,
+  onSelectFinding,
+  onReviewChange,
+}: SpatialFindingsProps) {
+  const activePhotoIndex = Math.max(0, photos.findIndex((photo) => photo.id === selectedPhotoId));
+  const visibleFindings = findings.filter(
+    (finding) => finding.imageId === selectedPhotoId || (!finding.imageId && activePhotoIndex === 0)
+  );
+  const visibleObjects = detectedObjects.filter(
+    (object) => object.imageId === selectedPhotoId || (!object.imageId && activePhotoIndex === 0)
+  );
+
   return (
-    <section className="space-y-4" aria-labelledby="spatial-findings-title">
+    <section id="spatial-findings" className="space-y-4 scroll-mt-24" aria-labelledby="spatial-findings-title">
       <div>
         <span className="field-tag text-muted-foreground block mb-1">Image-coordinate analysis</span>
         <h2 id="spatial-findings-title" className="text-2xl font-semibold tracking-tight">
@@ -179,22 +193,78 @@ export function SpatialFindings({ findings, detectedObjects }: SpatialFindingsPr
           distances or confirm that a route is physically blocked, and they do not affect the safety score.
         </p>
       </div>
-      <SpatialMap findings={findings} detectedObjects={detectedObjects} />
-      {findings.length === 0 ? (
+      {photos.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {photos.map((photo, index) => (
+            <button
+              key={photo.id}
+              type="button"
+              aria-pressed={photo.id === selectedPhotoId}
+              onClick={() => onSelectPhoto(photo.id)}
+              className={`w-36 shrink-0 overflow-hidden rounded-lg border text-left transition-colors ${
+                photo.id === selectedPhotoId
+                  ? "border-brand ring-2 ring-brand/25"
+                  : "border-border hover:border-brand/50"
+              }`}
+            >
+              <img src={photo.image} alt="" className="h-20 w-full object-cover" />
+              <span className="block truncate px-2 py-1.5 text-[11px] font-medium">
+                {index === 0 ? "Overview" : photo.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {photos.length > 1 && (
+        <p className="text-xs text-muted-foreground">
+          Map and object relationships are scoped to the selected photo:{" "}
+          <span className="font-medium text-foreground">
+            {photos[activePhotoIndex]?.label || "Room overview"}
+          </span>
+        </p>
+      )}
+      <SpatialMap findings={visibleFindings} detectedObjects={visibleObjects} />
+      {visibleFindings.length === 0 ? (
         <div className="border-y border-border py-5 text-sm text-muted-foreground">
-          No supported spatial relationships were identified from the available detected boxes.
+          No supported spatial relationships were identified in this photo.
           This does not confirm that walkways or doorways are clear; relevant objects or regions may
           not have been detected, and a 2D image cannot establish physical clearance.
         </div>
       ) : (
         <div className="divide-y divide-border border-y border-border">
-          {findings.map((finding) => (
-            <article key={finding.id} className="py-5 space-y-2">
+          {visibleFindings.map((finding) => (
+            <article
+              key={finding.id}
+              className={`py-5 space-y-3 transition-colors ${
+                selectedFindingId === finding.id ? 'bg-brand/5 -mx-3 px-3 rounded-lg' : ''
+              }`}
+            >
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium">{relationLabels[finding.relationType]}</h3>
+                <button
+                  type="button"
+                  className="font-medium text-left hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand rounded-sm"
+                  aria-pressed={selectedFindingId === finding.id}
+                  onClick={() => onSelectFinding(selectedFindingId === finding.id ? null : finding.id)}
+                >
+                  {relationLabels[finding.relationType]}
+                </button>
                 <span className={`rounded-full px-2 py-1 text-xs ${statusStyles[finding.evidenceStatus]}`}>
                   {finding.evidenceStatus}
                 </span>
+                <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  {finding.provenance?.origin === 'spatial-engine'
+                    ? 'Deterministic geometry'
+                    : 'Source not recorded'}
+                </span>
+                {finding.reviewStatus && finding.reviewStatus !== 'unreviewed' && (
+                  <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                    {finding.reviewStatus === 'confirmed'
+                      ? 'You confirmed this'
+                      : finding.reviewStatus === 'disputed'
+                        ? 'You marked this not present'
+                        : 'You requested another review'}
+                  </span>
+                )}
               </div>
               <p className="text-sm">
                 <span className="font-medium">Objects:</span> {finding.objectsInvolved.join(' and ')}
@@ -206,6 +276,70 @@ export function SpatialFindings({ findings, detectedObjects }: SpatialFindingsPr
               <p className="text-xs text-muted-foreground">
                 Confidence: {finding.confidence}% (heuristic, not calibrated). {finding.limitations}
               </p>
+              <details className="text-xs text-muted-foreground">
+                <summary className="w-fit cursor-pointer font-medium text-foreground">
+                  Evidence record details
+                </summary>
+                <div className="mt-2 space-y-1">
+                  <p>Relationship record: <code>{finding.id}</code></p>
+                  <p>Observation records: {finding.objectIds.map((id) => <code key={id} className="mr-2">{id}</code>)}</p>
+                  {finding.provenance?.createdAt && (
+                    <p>Derived by spatial engine: {new Date(finding.provenance.createdAt).toLocaleString()}</p>
+                  )}
+                  {evidenceReviews
+                    .filter((review) => review.targetType === 'spatial-finding' && review.targetId === finding.id)
+                    .map((review) => (
+                      <p key={review.id}>
+                        User {review.status.replaceAll('_', ' ')} · {new Date(review.reviewedAt).toLocaleString()} ·{" "}
+                        <code>{review.id}</code>
+                        {review.note ? ` · ${review.note}` : ''}
+                      </p>
+                    ))}
+                  {!evidenceReviews.some(
+                    (review) =>
+                      review.targetType === 'spatial-finding' && review.targetId === finding.id
+                  ) && <p>No user review has been recorded.</p>}
+                </div>
+              </details>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-xs text-muted-foreground font-medium">Your review:</span>
+                <Button
+                  size="sm"
+                  variant={finding.reviewStatus === 'confirmed' ? 'secondary' : 'outline'}
+                  className="h-8 gap-1.5 text-xs"
+                  aria-pressed={finding.reviewStatus === 'confirmed'}
+                  onClick={() => onReviewChange(finding.id, 'confirmed')}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Looks right
+                </Button>
+                <Button
+                  size="sm"
+                  variant={finding.reviewStatus === 'disputed' ? 'secondary' : 'outline'}
+                  className="h-8 gap-1.5 text-xs"
+                  aria-pressed={finding.reviewStatus === 'disputed'}
+                  onClick={() => onReviewChange(finding.id, 'disputed')}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Not present
+                </Button>
+                <Button
+                  size="sm"
+                  variant={finding.reviewStatus === 'needs_review' ? 'secondary' : 'outline'}
+                  className="h-8 gap-1.5 text-xs"
+                  aria-pressed={finding.reviewStatus === 'needs_review'}
+                  onClick={() => onReviewChange(finding.id, 'needs_review')}
+                >
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Needs review
+                </Button>
+                {finding.objectIds.length > 0 && (
+                  <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Eye className="h-3.5 w-3.5" />
+                    Select to highlight photo evidence
+                  </span>
+                )}
+              </div>
             </article>
           ))}
         </div>

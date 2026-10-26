@@ -97,7 +97,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
             <h3 className={`text-xl font-semibold tracking-tight ${scoreColor(score)}`}>{ratingText}</h3>
             {potential > score && (
               <span className="text-xs text-muted-foreground">
-                Up to <span className="tabular font-medium text-foreground">{potential}</span> possible
+                Scenario only: <span className="tabular font-medium text-foreground">{potential}</span>
               </span>
             )}
           </div>
@@ -141,7 +141,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
               )}
             </div>
             <div>
-              <span className="field-tag text-muted-foreground block mb-1.5">Projected after fixes</span>
+              <span className="field-tag text-muted-foreground block mb-1.5">Illustrative scenario · not measured</span>
               <span className="tabular text-2xl font-semibold text-success">{potential} / 100</span>
             </div>
           </div>
@@ -153,6 +153,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
               <strong className="text-foreground font-medium">Important Safety Context:</strong> This score is a
               preliminary visual index based on objects identified in submitted photos. A high score does not
               guarantee the room is completely free of slip hazards, loose handrails, or non-visible electrical/structural risks.
+              Recommendation status and completion never change the measured score; a new assessment is required to measure changes.
             </p>
           </div>
         </div>

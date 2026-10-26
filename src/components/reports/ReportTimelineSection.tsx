@@ -19,8 +19,15 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const potential = projectedScore(currentScan.safetyScore, currentScan.recommendations);
-  const completedRecs = (currentScan.recommendations || []).filter((r) => !!r.completedAt);
-  const pendingRecs = (currentScan.recommendations || []).filter((r) => !r.completedAt);
+  const completedRecs = (currentScan.recommendations || []).filter(
+    (recommendation) => recommendation.actionStatus === "verified"
+  );
+  const pendingRecs = (currentScan.recommendations || []).filter((recommendation) => {
+    const status =
+      recommendation.actionStatus ??
+      (recommendation.completedAt ? "follow_up_due" : "open");
+    return status !== "verified" && status !== "dismissed";
+  });
 
   const scores = [...history.map((s) => s.safetyScore), potential];
   const min = Math.min(...scores, 0);
@@ -52,14 +59,14 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
         <span className="field-tag text-muted-foreground">Timeline & Trajectory</span>
         {hasProjection && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-success/15 text-success font-medium">
-            +{potential - currentScan.safetyScore} pts projected
+            Illustrative scenario only · +{potential - currentScan.safetyScore}
           </span>
         )}
       </div>
       <p className="text-muted-foreground mb-8 max-w-lg">
         {history.length > 1
-          ? "Safety score progression across assessments and completed improvements."
-          : "Initial assessment score and projected room trajectory upon completing recommendations."}
+          ? "Scores change only from new assessments and reviewed findings; action updates never award score points."
+          : "The solid line shows assessment results. Any dashed target is illustrative only and never changes the measured score."}
       </p>
 
       {points.length > 0 && (
@@ -132,7 +139,7 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
                 <span className="block w-3.5 h-3.5 rounded-full border-2 border-dashed border-success bg-background shadow-sm" />
                 <div className="absolute top-5 right-0 whitespace-nowrap text-right">
                   <span className="tabular text-xs font-semibold text-success block">{potential}</span>
-                  <span className="text-[10px] text-success font-medium">Projected Target</span>
+                  <span className="text-[10px] text-success font-medium">Illustrative only</span>
                 </div>
               </div>
             )}
@@ -166,15 +173,17 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
           <div key={rec.id} className="flex items-center justify-between py-3.5 border-b border-border text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-success" />
-              <span>Resolved: {rec.title}</span>
+              <span>Verified after follow-up: {rec.title}</span>
             </div>
-            <span className="tabular font-medium text-success">+{rec.expectedImpact} pts</span>
+            <span className="tabular font-medium text-success">Follow-up complete</span>
           </div>
         ))}
 
         <div className="flex items-center justify-between py-4 text-muted-foreground">
           <span className="text-sm">
-            {pendingRecs.length > 0 ? `Projected score (${pendingRecs.length} open recommendations)` : "Fully Optimized Score"}
+            {pendingRecs.length > 0
+              ? `Illustrative score scenario (${pendingRecs.length} open actions) · not measured`
+              : "No open improvement actions"}
           </span>
           <span className="tabular text-sm font-semibold text-success">{potential}</span>
         </div>

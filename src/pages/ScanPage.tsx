@@ -11,10 +11,8 @@ import {
   Award, 
   BookOpen, 
   Info, 
-  CheckCircle2, 
   Trash2,
-  Compass,
-  Ruler
+  Plus,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -22,16 +20,32 @@ import { useHomeStore } from "@/stores/useHomeStore";
 import { useScanStore } from "@/stores/scanStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useStagingStore } from "@/stores/useStagingStore";
-import { analysisService } from "@/services/ai/analysisService";
+import { analysisService, ScanPipelineError } from "@/services/ai/analysisService";
 import { motion, AnimatePresence } from "motion/react";
 import { AnalysisWorkspace } from "@/components/scan/AnalysisWorkspace";
 import { LiveWalkthrough } from "@/components/scan/LiveWalkthrough";
 import { QrHandoffModal } from "@/components/vault/QrHandoffModal";
 import type { ScanResult } from "@/types/ai";
+import type { ScanPhotoInput } from "@/services/ai/analysisService";
 import { StagedPhoto } from "@/types/home";
 import { SAMPLE_ASSESSMENTS } from "@/data/sampleAssessments";
 import { analyzeSpatialRelationships } from "@/services/ai/spatialAnalyzer";
 import { processImageForStorage } from "@/services/storageService";
+
+const DETAIL_PHOTO_GUIDES = [
+  {
+    label: "Floor & walking area",
+    instruction: "Show the floor near common walking routes, rugs, cords, and clutter.",
+  },
+  {
+    label: "Doorway & entrance",
+    instruction: "Capture the doorway, threshold, and the space directly around it.",
+  },
+  {
+    label: "Bed, chair, or transfer area",
+    instruction: "Show the space beside the bed or seat where someone stands or transfers.",
+  },
+] as const;
 
 export function ScanPage() {
   const { homeId, roomId } = useParams();
@@ -40,18 +54,22 @@ export function ScanPage() {
   const { user } = useAuthStore();
   const { homes, hiddenHomes, hiddenRooms } = useHomeStore();
   const visibleHomes = homes.filter((h) => !hiddenHomes.includes(h.id));
-  const { addScan } = useScanStore();
+  const { addScan, recordPipelineTrace, getScanById, updateRecommendationAction } = useScanStore();
   const { photos: stagedPhotos, markScanned, deletePhoto } = useStagingStore();
 
   const paramStagedId = searchParams.get("stagedId");
   const paramHomeId = searchParams.get("homeId");
   const paramRoomType = searchParams.get("roomType");
+  const followUpScanId = searchParams.get("followUpScanId");
+  const followUpRecommendationId = searchParams.get("followUpRecommendationId");
 
   const [selectedHomeId, setSelectedHomeId] = useState<string>(homeId || paramHomeId || "");
   const [selectedRoomId, setSelectedRoomId] = useState<string>(roomId || "");
 
-  const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [overviewPhotoId, setOverviewPhotoId] = useState<string>(() => crypto.randomUUID());
+  const [detailPhotos, setDetailPhotos] = useState<ScanPhotoInput[]>([]);
+  const [processingDetailLabel, setProcessingDetailLabel] = useState<string | null>(null);
   const [selectedStagedPhoto, setSelectedStagedPhoto] = useState<StagedPhoto | null>(null);
   const [isLiveWalkthroughOpen, setIsLiveWalkthroughOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -60,12 +78,6 @@ export function ScanPage() {
 
   const currentHome = visibleHomes.find((h) => h.id === selectedHomeId);
   const currentRoom = currentHome?.rooms.find((r) => r.id === selectedRoomId);
-
-  // Match sample if preview is from a sample
-  const matchingSample = useMemo(() => {
-    if (!preview) return null;
-    return SAMPLE_ASSESSMENTS.find((s) => s.thumbnailUrl === preview);
-  }, [preview]);
 
   // Unscanned photos from the user's Photo Library
   const unscannedLibraryPhotos = useMemo(() => {
@@ -86,6 +98,8 @@ export function ScanPage() {
       if (match) {
         setSelectedStagedPhoto(match);
         setPreview(match.imageUrl);
+        setOverviewPhotoId(match.id);
+        setDetailPhotos([]);
         if (match.homeId && (!selectedHomeId || selectedHomeId !== match.homeId)) {
           setSelectedHomeId(match.homeId);
         }
@@ -115,7 +129,8 @@ export function ScanPage() {
   const handleSelectLibraryPhoto = (photo: StagedPhoto) => {
     setSelectedStagedPhoto(photo);
     setPreview(photo.imageUrl);
-    setFile(null);
+    setOverviewPhotoId(photo.id);
+    setDetailPhotos([]);
 
     if (photo.homeId && photo.homeId !== selectedHomeId) {
       setSelectedHomeId(photo.homeId);
@@ -142,6 +157,8 @@ export function ScanPage() {
       if (selectedStagedPhoto?.id === photo.id) {
         setSelectedStagedPhoto(null);
         setPreview(null);
+        setOverviewPhotoId("");
+        setDetailPhotos([]);
       }
     } catch {
       toast.error("Failed to remove photo");
@@ -151,10 +168,19 @@ export function ScanPage() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
-      setFile(selectedFile);
+      if (!selectedFile.type.startsWith("image/")) {
+        toast.error("Choose an image file for the room overview.");
+        return;
+      }
       setSelectedStagedPhoto(null);
-      const photoUrl = await processImageForStorage(selectedFile);
-      setPreview(photoUrl);
+      try {
+        const photoUrl = await processImageForStorage(selectedFile);
+        setPreview(photoUrl);
+        setOverviewPhotoId(crypto.randomUUID());
+        setDetailPhotos([]);
+      } catch {
+        toast.error("Couldn't prepare that room photo. Please try another image.");
+      }
     }
   };
 
@@ -162,10 +188,43 @@ export function ScanPage() {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const selectedFile = e.dataTransfer.files[0];
-      setFile(selectedFile);
+      if (!selectedFile.type.startsWith("image/")) {
+        toast.error("Choose an image file for the room overview.");
+        return;
+      }
       setSelectedStagedPhoto(null);
-      const photoUrl = await processImageForStorage(selectedFile);
-      setPreview(photoUrl);
+      try {
+        const photoUrl = await processImageForStorage(selectedFile);
+        setPreview(photoUrl);
+        setOverviewPhotoId(crypto.randomUUID());
+        setDetailPhotos([]);
+      } catch {
+        toast.error("Couldn't prepare that room photo. Please try another image.");
+      }
+    }
+  };
+
+  const handleAddDetailPhoto = async (file: File, label: string) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choose an image file for this detail view.");
+      return;
+    }
+    setProcessingDetailLabel(label);
+    try {
+      const image = await processImageForStorage(file);
+      setDetailPhotos((photos) => [
+        ...photos,
+        {
+          id: crypto.randomUUID(),
+          role: "detail",
+          label,
+          image,
+        },
+      ]);
+    } catch {
+      toast.error("Couldn't prepare that detail photo. Please try another image.");
+    } finally {
+      setProcessingDetailLabel(null);
     }
   };
 
@@ -174,32 +233,101 @@ export function ScanPage() {
     if (!preview) return toast.error("Please select or upload an image");
     if (!selectedHomeId) return toast.error("Please select a property");
     if (!selectedRoomId) return toast.error("Please select a room");
+    if (followUpScanId && followUpRecommendationId) {
+      const sourceScan = getScanById(followUpScanId);
+      if (!sourceScan) return toast.error("The earlier assessment for this follow-up is unavailable.");
+      if (sourceScan.homeId !== selectedHomeId || sourceScan.roomId !== selectedRoomId) {
+        return toast.error("A follow-up comparison must use the same property and room as the earlier assessment.");
+      }
+    }
 
     setIsAnalyzing(true);
   };
 
+  const scanPhotos = useMemo<ScanPhotoInput[]>(
+    () => [
+      {
+        id: overviewPhotoId || crypto.randomUUID(),
+        role: "overview",
+        label: selectedStagedPhoto?.title || "Room overview",
+        image: preview || "",
+      },
+      ...detailPhotos,
+    ],
+    [detailPhotos, overviewPhotoId, preview, selectedStagedPhoto]
+  );
+
   const runAnalysis = () =>
-    analysisService.analyzeRoom(selectedHomeId, selectedRoomId, [preview!]);
+    analysisService.analyzeRoom(selectedHomeId, selectedRoomId, scanPhotos);
 
   const handleAnalysisDone = async (result: ScanResult) => {
     try {
-      await addScan(user!.uid, selectedRoomId, result);
+      const scanToSave =
+        followUpScanId && followUpRecommendationId
+          ? {
+              ...result,
+              followUpFromScanId: followUpScanId,
+              followUpRecommendationId,
+            }
+          : result;
+      await addScan(user!.uid, selectedRoomId, scanToSave);
+
+      if (followUpScanId && followUpRecommendationId) {
+        try {
+          await updateRecommendationAction(
+            followUpScanId,
+            followUpRecommendationId,
+            "follow_up_due",
+            { followUpScanId: result.id }
+          );
+        } catch (error) {
+          console.error("Follow-up scan link could not be saved:", error);
+          toast.error("The follow-up scan was saved, but it could not be linked to the action.");
+        }
+      }
 
       if (selectedStagedPhoto) {
         await markScanned(selectedStagedPhoto.id, result.id).catch(() => {});
       }
 
       toast.success("Analysis complete and saved");
-      navigate(`/assessments`);
+      navigate(
+        followUpScanId && followUpRecommendationId
+          ? `/properties/${result.homeId}/rooms/${result.roomId}/assessments/${result.id}`
+          : `/assessments`
+      );
     } catch (error) {
       console.error(error);
+      if (result.pipelineTrace && user?.uid) {
+        try {
+          await recordPipelineTrace(user.uid, {
+            ...result.pipelineTrace,
+            status: "failed",
+            persistenceStatus: "failed",
+            completedAt: new Date().toISOString(),
+            failureStage: "storage",
+            failureCode: "report_save_failed",
+          });
+        } catch (traceError) {
+          console.error("Failed to save scan pipeline trace:", traceError);
+          toast.error("The report and its diagnostic trace could not be saved.");
+        }
+      }
       toast.error("Couldn't save this report to storage. Please try again.");
       setIsAnalyzing(false);
     }
   };
 
-  const handleAnalysisError = (error: any) => {
+  const handleAnalysisError = async (error: unknown) => {
     console.error("Scan analysis error:", error);
+    if (error instanceof ScanPipelineError && user?.uid) {
+      try {
+        await recordPipelineTrace(user.uid, error.trace);
+      } catch (traceError) {
+        console.error("Failed to save scan pipeline trace:", traceError);
+        toast.error("The scan failed, and its diagnostic trace could not be saved.");
+      }
+    }
     // Keep preview intact so user does not lose their image
   };
 
@@ -207,6 +335,7 @@ export function ScanPage() {
     return (
       <AnalysisWorkspace
         previewUrl={preview!}
+        photos={scanPhotos}
         roomName={currentRoom?.name || "Selected Room"}
         run={runAnalysis}
         onDone={handleAnalysisDone}
@@ -233,7 +362,9 @@ export function ScanPage() {
           roomType={currentHome?.rooms.find((r) => r.id === selectedRoomId)?.type}
           onSnapshotSaved={(photoUrl) => {
             setPreview(photoUrl);
-            setSelectedStagedPhoto(null);
+          setOverviewPhotoId(crypto.randomUUID());
+          setDetailPhotos([]);
+          setSelectedStagedPhoto(null);
           }}
         />
       )}
@@ -365,6 +496,8 @@ export function ScanPage() {
                         className="text-xs h-8 cursor-pointer"
                         onClick={() => {
                           setPreview(sample.thumbnailUrl);
+                          setOverviewPhotoId(sample.id);
+                          setDetailPhotos([]);
                           setSelectedStagedPhoto(null);
                           setShowSampleSelector(false);
                           toast.info(`Loaded ${sample.name} into visual scanner`);
@@ -557,8 +690,9 @@ export function ScanPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setFile(null);
                       setPreview(null);
+                      setOverviewPhotoId("");
+                      setDetailPhotos([]);
                       setSelectedStagedPhoto(null);
                     }}
                     className="text-xs text-muted-foreground hover:text-foreground gap-1.5 cursor-pointer"
@@ -572,37 +706,108 @@ export function ScanPage() {
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative w-full aspect-[4/3] md:aspect-[3/2] overflow-hidden bg-black border border-border rounded-xl text-white"
+                  className="relative w-full aspect-[4/3] md:aspect-[3/2] overflow-hidden bg-black border border-border rounded-xl"
                 >
-                  <img src={preview} alt="Selected room" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-
+                  <img src={preview} alt="Room overview photo" className="w-full h-full object-contain" />
                   {selectedStagedPhoto && (
-                    <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2">
+                    <div className="absolute top-4 left-4 bg-black/65 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-lg text-xs text-white flex items-center gap-2">
                       <Smartphone className="w-3.5 h-3.5 text-brand" />
                       <span className="font-semibold">{selectedStagedPhoto.title}</span>
                       <span className="text-white/60">({selectedStagedPhoto.roomType})</span>
                     </div>
                   )}
-
-                  <div className="absolute bottom-6 left-6 right-6 space-y-3">
-                    {selectedStagedPhoto?.notes && (
-                      <p className="text-xs text-white/80 bg-black/40 backdrop-blur-sm p-2 rounded-md border border-white/10 line-clamp-1">
-                        <span className="text-white font-medium">Notes: </span>
-                        {selectedStagedPhoto.notes}
-                      </p>
-                    )}
-                    <Button
-                      variant="brand"
-                      size="lg"
-                      onClick={handleAnalyze}
-                      disabled={isAnalyzing || !selectedHomeId || !selectedRoomId}
-                      className="w-full h-12 text-sm font-semibold cursor-pointer"
-                    >
-                      Run Vision Safety Assessment
-                    </Button>
-                  </div>
                 </motion.div>
+
+                {selectedStagedPhoto?.notes && (
+                  <p className="text-xs text-muted-foreground border-l-2 border-brand/50 pl-3">
+                    <span className="font-medium text-foreground">Photo note: </span>
+                    {selectedStagedPhoto.notes}
+                  </p>
+                )}
+
+                <section className="rounded-xl border border-border bg-card p-4 md:p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">Build a room photo set</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-xl leading-relaxed">
+                        Begin with a wide room overview. Optional close-ups add detail; every view is analyzed separately and findings stay tied to their source photo.
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                      {1 + detailPhotos.length} / 4 photos
+                    </span>
+                  </div>
+
+                  {detailPhotos.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {detailPhotos.map((photo) => (
+                        <div key={photo.id} className="relative min-w-0 rounded-lg border border-border bg-background p-2">
+                          <img
+                            src={photo.image}
+                            alt={photo.label}
+                            className="h-24 w-full rounded-md object-cover"
+                          />
+                          <p className="truncate text-xs font-medium text-foreground mt-2">{photo.label}</p>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${photo.label} photo`}
+                            onClick={() => setDetailPhotos((items) => items.filter((item) => item.id !== photo.id))}
+                            className="absolute right-3 top-3 rounded-full bg-black/70 p-1.5 text-white hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {detailPhotos.length < DETAIL_PHOTO_GUIDES.length && (
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {DETAIL_PHOTO_GUIDES.filter(
+                        (guide) => !detailPhotos.some((photo) => photo.label === guide.label)
+                      ).map((guide) => (
+                        <label
+                          key={guide.label}
+                          className={`cursor-pointer rounded-lg border border-dashed border-border p-3 text-left transition-colors hover:border-brand hover:bg-brand/5 ${
+                            processingDetailLabel ? "pointer-events-none opacity-50" : ""
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                            <Plus className="h-3.5 w-3.5 text-brand" />
+                            {guide.label}
+                          </span>
+                          <span className="mt-1.5 block text-[11px] leading-relaxed text-muted-foreground">
+                            {processingDetailLabel === guide.label
+                              ? "Preparing photo..."
+                              : guide.instruction}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="sr-only"
+                            disabled={Boolean(processingDetailLabel)}
+                            onChange={(event) => {
+                              const selectedFile = event.currentTarget.files?.[0];
+                              if (selectedFile) void handleAddDetailPhoto(selectedFile, guide.label);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  <Button
+                    variant="brand"
+                    size="lg"
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing || Boolean(processingDetailLabel) || !selectedHomeId || !selectedRoomId}
+                    className="w-full h-12 text-sm font-semibold cursor-pointer"
+                  >
+                    Analyze {1 + detailPhotos.length} room view{detailPhotos.length === 0 ? "" : "s"}
+                  </Button>
+                </section>
               </div>
             )}
           </AnimatePresence>

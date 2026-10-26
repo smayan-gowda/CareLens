@@ -8,6 +8,7 @@ import { useScanStore } from "@/stores/scanStore";
 import { useStagingStore } from "@/stores/useStagingStore";
 import { format } from "date-fns";
 import { LensMark } from "@/components/brand/LensMark";
+import { getRecommendationActionStatus } from "@/utils/recommendationActions";
 
 export function DashboardPage() {
   const { homes, loading: homesLoading } = useHomeStore();
@@ -25,6 +26,19 @@ export function DashboardPage() {
       .filter(r => r.status === 'Completed' && r.hazards.length > 0)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [allScans]);
+
+  const openActions = useMemo(
+    () =>
+      allScans.flatMap((scan) =>
+        (scan.recommendations ?? [])
+          .filter((recommendation) => {
+            const status = getRecommendationActionStatus(recommendation);
+            return status !== "verified" && status !== "dismissed";
+          })
+          .map((recommendation) => ({ scan, recommendation }))
+      ),
+    [allScans]
+  );
 
   const allHazards = useMemo(() => activeReports.flatMap(r => r.hazards), [activeReports]);
   const highPriorityHazards = allHazards.filter(h => h.severity === 'High' || h.severity === 'Critical');
@@ -183,6 +197,49 @@ export function DashboardPage() {
             <p className="text-muted-foreground">Nothing needs your attention right now — your most recent scans came back clear.</p>
           </section>
         ) : null}
+
+        {openActions.length > 0 && (
+          <section className="pt-16 md:pt-20">
+            <div className="flex flex-col justify-between gap-6 border-y border-border py-8 sm:flex-row sm:items-center">
+              <div>
+                <span className="field-tag text-muted-foreground block mb-2">Next steps · all rooms</span>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {openActions.length} open improvement{openActions.length === 1 ? "" : "s"}
+                </h2>
+                <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  Accepted, deferred, and follow-up actions stay here until you close them after review.
+                  Completing work alone never changes a room&apos;s measured safety score.
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => navigate("/improvement-plan")}>
+                Open improvement plan <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+            <div className="divide-y divide-border">
+              {openActions.slice(0, 3).map(({ scan, recommendation }) => {
+                const room = homes
+                  .find((home) => home.id === scan.homeId)
+                  ?.rooms.find((item) => item.id === scan.roomId);
+                return (
+                  <button
+                    key={`${scan.id}-${recommendation.id}`}
+                    type="button"
+                    onClick={() => navigate("/improvement-plan")}
+                    className="flex w-full items-center justify-between gap-4 py-4 text-left hover:text-brand"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{recommendation.title}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {room?.name ?? scan.roomType ?? "Room"} · {getRecommendationActionStatus(recommendation).replaceAll("_", " ")}
+                      </span>
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* ===== Recent scans — a photographic strip, wide crops, not square thumbnails ===== */}
         {activeReports.length > 0 && (

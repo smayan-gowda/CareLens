@@ -12,7 +12,8 @@ const navItems = [
   { id: "02", label: "Properties", path: "/properties" },
   { id: "03", label: "Photo Library", path: "/library" },
   { id: "04", label: "Assessments", path: "/assessments" },
-  { id: "05", label: "Marketplace", path: "/marketplace" },
+  { id: "05", label: "Improvement Plan", path: "/improvement-plan" },
+  { id: "06", label: "Marketplace", path: "/marketplace" },
 ];
 
 /**

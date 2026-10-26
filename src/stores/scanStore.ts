@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ScanResult } from '@/types/ai';
+import {
+  EvidenceReview,
+  EvidenceReviewStatus,
+  Recommendation,
+  RecommendationActionStatus,
+  ScanPipelineTrace,
+  ScanResult,
+  SpatialFinding,
+  SpatialFindingReviewStatus,
+} from '@/types/ai';
 import { db, cleanUndefined, handleFirestoreError, OperationType, auth } from '@/lib/firebase';
 import { 
   collection, 
@@ -18,8 +27,11 @@ import {
 } from 'firebase/firestore';
 
 import { compressImageDataUrl } from '@/utils/imageCompression';
+import { appendRecommendationAction, type RecommendationActionDetails } from '@/utils/recommendationActions';
 import { processImageForStorage } from '@/services/storageService';
 import { getScoreFormulaBreakdown } from '@/components/reports/reportMath';
+
+type ScanToPersist = Omit<ScanResult, 'id'> & { id?: string };
 
 interface ScanState {
   scans: Record<string, ScanResult[]>;
@@ -30,12 +42,45 @@ interface ScanState {
   // Subscription management
   subscribe: (userId: string) => () => void;
   
-  addScan: (userId: string, roomId: string, scan: Omit<ScanResult, 'id'>) => Promise<void>;
+  addScan: (userId: string, roomId: string, scan: ScanToPersist) => Promise<void>;
+  recordPipelineTrace: (userId: string, trace: ScanPipelineTrace) => Promise<void>;
   deleteScan: (roomId: string, scanId: string) => Promise<void>;
   getScansForRoom: (roomId: string) => ScanResult[];
   getScanById: (scanId: string) => ScanResult | undefined;
-  toggleRecommendation: (scanId: string, recommendationId: string) => Promise<boolean>;
-  updateHazardFeedback: (scanId: string, hazardId: string, feedback: 'helpful' | 'not_present' | 'needs_review') => Promise<void>;
+  updateRecommendationAction: (
+    scanId: string,
+    recommendationId: string,
+    status: RecommendationActionStatus,
+    details?: RecommendationActionDetails
+  ) => Promise<void>;
+  updateHazardFeedback: (
+    scanId: string,
+    hazardId: string,
+    feedback: 'helpful' | 'not_present' | 'needs_review'
+  ) => Promise<EvidenceReview | undefined>;
+  updateSpatialFindingReview: (
+    scanId: string,
+    findingId: string,
+    reviewStatus: Exclude<SpatialFindingReviewStatus, 'unreviewed'>,
+    findings: SpatialFinding[]
+  ) => Promise<EvidenceReview | undefined>;
+}
+
+function createEvidenceReview(
+  targetType: EvidenceReview['targetType'],
+  targetId: string,
+  status: EvidenceReviewStatus,
+  imageId?: string
+): EvidenceReview {
+  return {
+    id: `review-${crypto.randomUUID()}`,
+    targetType,
+    targetId,
+    status,
+    origin: 'user',
+    reviewedAt: new Date().toISOString(),
+    imageId,
+  };
 }
 
 export const useScanStore = create<ScanState>()(
@@ -79,13 +124,20 @@ export const useScanStore = create<ScanState>()(
       },
 
       addScan: async (userId, roomId, scanData) => {
-        const scanId = (scanData as any).id || `scan-${Date.now()}`;
+        const scanId = scanData.id || `scan-${Date.now()}`;
         let images = scanData.images 
           ? await Promise.all(scanData.images.map(img => processImageForStorage(img)))
           : scanData.images;
+        const pipelineTrace = scanData.pipelineTrace
+          ? { ...scanData.pipelineTrace, persistenceStatus: 'saved' as const }
+          : undefined;
 
         let newScan = cleanUndefined({
           ...scanData,
+          pipelineTrace,
+          assessmentTrace: scanData.assessmentTrace && pipelineTrace
+            ? { ...scanData.assessmentTrace, pipeline: pipelineTrace }
+            : scanData.assessmentTrace,
           images,
           id: scanId,
           userId,
@@ -107,6 +159,20 @@ export const useScanStore = create<ScanState>()(
           await setDoc(doc(db, 'scans', scanId), newScan);
         } catch (error) {
           handleFirestoreError(error, OperationType.CREATE, 'scans');
+        }
+      },
+
+      recordPipelineTrace: async (userId, trace) => {
+        if (trace.status !== 'failed') {
+          throw new Error('Only failed scan pipeline traces can be stored without a report.');
+        }
+        try {
+          await setDoc(doc(db, 'scanPipelineTraces', trace.scanId), cleanUndefined({
+            userId,
+            ...trace,
+          }));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, 'scanPipelineTraces');
         }
       },
 
@@ -244,40 +310,23 @@ export const useScanStore = create<ScanState>()(
         return undefined;
       },
 
-      toggleRecommendation: async (scanId, recommendationId) => {
+      updateRecommendationAction: async (
+        scanId,
+        recommendationId,
+        status,
+        details: RecommendationActionDetails = {}
+      ) => {
         const scan = get().getScanById(scanId);
-        if (!scan) return false;
+        if (!scan) throw new Error('Assessment not found for this action.');
 
-        const userId = auth.currentUser?.uid || (scan as any).userId;
-        const initialScore = (scan as any).initialSafetyScore ?? scan.safetyScore;
-
-        let recTitle = '';
-        let recImpact = 0;
-        let isCompletedNow = false;
-
-        const updatedRecommendations = (scan.recommendations || []).map((r) => {
-          if (r.id === recommendationId) {
-            recTitle = r.title;
-            recImpact = r.expectedImpact || 0;
-            isCompletedNow = !r.completedAt;
-            return {
-              ...r,
-              completedAt: isCompletedNow ? new Date().toISOString() : undefined,
-            };
-          }
-          return r;
-        });
-
-        const completedRecs = updatedRecommendations.filter((r) => !!r.completedAt);
-        const totalCompletedGain = completedRecs.reduce((sum, r) => sum + (r.expectedImpact || 0), 0);
-        const newSafetyScore = Math.min(100, Math.round(initialScore + totalCompletedGain));
-
-        const updatedScan = {
-          ...scan,
-          initialSafetyScore: initialScore,
-          safetyScore: newSafetyScore,
-          recommendations: updatedRecommendations,
-        } as ScanResult;
+        const target = scan.recommendations?.find((recommendation) => recommendation.id === recommendationId);
+        if (!target) throw new Error('Recommendation not found in this assessment.');
+        const updatedRecommendations = scan.recommendations.map((recommendation) =>
+          recommendation.id === recommendationId
+            ? appendRecommendationAction(recommendation, status, details)
+            : recommendation
+        );
+        const updatedScan = { ...scan, recommendations: updatedRecommendations };
 
         set((state) => {
           const newScans = { ...state.scans };
@@ -289,50 +338,53 @@ export const useScanStore = create<ScanState>()(
 
         try {
           await updateDoc(doc(db, 'scans', scanId), cleanUndefined({
-            initialSafetyScore: initialScore,
-            safetyScore: newSafetyScore,
             recommendations: updatedRecommendations,
           }));
-
-          if (userId && isCompletedNow) {
-            await addDoc(collection(db, 'timelineEvents'), cleanUndefined({
-              userId,
-              homeId: scan.homeId,
-              roomId: scan.roomId,
-              scanId: scan.id,
-              title: `Resolved: ${recTitle}`,
-              description: `Completed recommendation (+${recImpact} pts). Room safety score is now ${newSafetyScore}.`,
-              type: 'improvement',
-              timestamp: new Date().toISOString(),
-            }));
-          }
-          return isCompletedNow;
         } catch (error) {
+          set((state) => {
+            const newScans = { ...state.scans };
+            if (newScans[scan.roomId]) {
+              newScans[scan.roomId] = newScans[scan.roomId].map((item) =>
+                item.id === scanId ? scan : item
+              );
+            }
+            return { scans: newScans };
+          });
           console.error('Error updating recommendation status:', error);
-          return isCompletedNow;
+          throw error;
         }
       },
 
       updateHazardFeedback: async (scanId, hazardId, feedback) => {
         const scan = get().getScanById(scanId);
-        if (!scan) return;
+        if (!scan) return undefined;
 
         const reviewStatusMap = {
           helpful: 'confirmed',
           not_present: 'disputed',
-          needs_review: 'unresolved'
+          needs_review: 'needs_review'
         } as const;
 
+        const targetHazard = (scan.hazards || []).find((hazard) => hazard.id === hazardId);
+        if (!targetHazard) return undefined;
+        const review = createEvidenceReview(
+          'hazard',
+          hazardId,
+          reviewStatusMap[feedback],
+          targetHazard.imageId
+        );
         const updatedHazards = (scan.hazards || []).map((h) => {
           if (h.id === hazardId) {
             return {
               ...h,
               feedback,
               reviewStatus: reviewStatusMap[feedback],
+              reviewIds: [...(h.reviewIds ?? []), review.id],
             };
           }
           return h;
         });
+        const updatedReviews = [...(scan.evidenceReviews ?? []), review];
 
         const breakdown = getScoreFormulaBreakdown(updatedHazards);
         const newSafetyScore = breakdown.calculatedScore;
@@ -341,6 +393,7 @@ export const useScanStore = create<ScanState>()(
           ...scan,
           safetyScore: newSafetyScore,
           hazards: updatedHazards,
+          evidenceReviews: updatedReviews,
         };
 
         set((state) => {
@@ -355,9 +408,90 @@ export const useScanStore = create<ScanState>()(
           await updateDoc(doc(db, 'scans', scanId), cleanUndefined({
             safetyScore: newSafetyScore,
             hazards: updatedHazards,
+            evidenceReviews: updatedReviews,
           }));
+          return review;
         } catch (error) {
+          set((state) => {
+            const newScans = { ...state.scans };
+            if (newScans[scan.roomId]) {
+              newScans[scan.roomId] = newScans[scan.roomId].map((item) =>
+                item.id === scanId ? scan : item
+              );
+            }
+            return { scans: newScans };
+          });
           console.error('Error updating hazard feedback:', error);
+          throw error;
+        }
+      },
+
+      updateSpatialFindingReview: async (scanId, findingId, reviewStatus, findings) => {
+        const scan = get().getScanById(scanId);
+        if (!scan) return undefined;
+
+        const currentFindings = scan.spatialFindings ?? findings;
+        const previousFinding = currentFindings.find((finding) => finding.id === findingId);
+        if (!previousFinding) return undefined;
+
+        const review = createEvidenceReview(
+          'spatial-finding',
+          findingId,
+          reviewStatus,
+          previousFinding.imageId
+        );
+        const updatedFindings = currentFindings.map((finding) =>
+          finding.id === findingId
+            ? { ...finding, reviewStatus, reviewIds: [...(finding.reviewIds ?? []), review.id] }
+            : finding
+        );
+        const updatedReviews = [...(scan.evidenceReviews ?? []), review];
+        const updatedScan = {
+          ...scan,
+          spatialFindings: updatedFindings,
+          evidenceReviews: updatedReviews,
+        };
+
+        set((state) => {
+          const newScans = { ...state.scans };
+          if (newScans[scan.roomId]) {
+            newScans[scan.roomId] = newScans[scan.roomId].map((item) =>
+              item.id === scanId ? updatedScan : item
+            );
+          }
+          return { scans: newScans };
+        });
+
+        try {
+          await updateDoc(
+            doc(db, 'scans', scanId),
+            cleanUndefined({
+              spatialFindings: updatedFindings,
+              evidenceReviews: updatedReviews,
+            })
+          );
+          return review;
+        } catch (error) {
+          set((state) => {
+            const newScans = { ...state.scans };
+            if (newScans[scan.roomId]) {
+              newScans[scan.roomId] = newScans[scan.roomId].map((item) => {
+                if (item.id !== scanId) return item;
+                return {
+                  ...item,
+                  evidenceReviews: scan.evidenceReviews,
+                  spatialFindings: currentFindings.map((finding) =>
+                    finding.id === findingId
+                      ? { ...finding, reviewStatus: previousFinding.reviewStatus }
+                      : finding
+                  ),
+                };
+              });
+            }
+            return { scans: newScans };
+          });
+          console.error('Error updating spatial finding review:', error);
+          throw error;
         }
       },
     }),
