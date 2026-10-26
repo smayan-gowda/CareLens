@@ -11,17 +11,19 @@ interface ExportCenterProps {
 
 export function ExportCenter({ scan, homeName = 'Home', roomName = 'Room' }: ExportCenterProps) {
  
- const handleDownloadPDF = () => {
- toast.info('Preparing report download...');
+ const handleDownloadTextReport = () => {
  const content = `Safety Report for ${homeName} - ${roomName}
 Date: ${new Date(scan.createdAt).toLocaleDateString()}
-Safety Score: ${scan.safetyScore}/100
+Original Scan Safety Index: ${scan.safetyScore}/100 (preliminary visual assessment; not a professional rating)
 
 Hazards:
 ${scan.hazards.map(h => `- ${h.title}: ${h.description} (Severity: ${h.severity})`).join('\n')}
 
 Recommendations:
-${scan.recommendations.map(r => `- ${r}`).join('\n')}
+${scan.recommendations.map(r => `- ${r.title}: ${r.description} (Priority: ${r.priority})`).join('\n')}
+
+User reviews may dispute findings but do not change the original scan score.
+This report is informational only and does not replace an in-home professional assessment.
 `;
  
  const blob = new Blob([content], { type: 'text/plain' });
@@ -33,7 +35,7 @@ ${scan.recommendations.map(r => `- ${r}`).join('\n')}
  a.click();
  document.body.removeChild(a);
  URL.revokeObjectURL(url);
- toast.success('Report downloaded successfully');
+ toast.success('Text report downloaded');
  };
 
  const handlePrint = () => {
@@ -42,9 +44,9 @@ ${scan.recommendations.map(r => `- ${r}`).join('\n')}
 
  const handleEmailCaregiver = () => {
  const subject = encodeURIComponent(`Safety Report: ${homeName} - ${roomName}`);
- const body = encodeURIComponent(`Please review the safety report for ${homeName} - ${roomName}.\n\nSafety Score: ${scan.safetyScore}/100\n\nYou can view the full report by logging into the CareLens AI application.`);
+ const body = encodeURIComponent(`Please review the safety report for ${homeName} - ${roomName}.\n\nOriginal Scan Safety Index: ${scan.safetyScore}/100 (preliminary visual assessment; not a professional rating)\n\nYou can view the full report by logging into the CareLens AI application.`);
  window.location.href = `mailto:?subject=${subject}&body=${body}`;
- toast.success('Opened email client');
+ toast.info('Opened an email draft in your email app. CareLens does not send the email.');
  };
 
  const handleCopyLink = () => {
@@ -72,14 +74,14 @@ ${scan.recommendations.map(r => `- ${r}`).join('\n')}
       <div>
         <span className="field-tag text-muted-foreground block mb-4">Export & Share</span>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <Button variant="outline" size="sm" onClick={handleDownloadPDF} className="w-full">
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Download
+          <Button variant="outline" size="sm" onClick={handleDownloadTextReport} className="w-full">
+            <Download className="mr-1.5 h-3.5 w-3.5" /> Text report
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} className="w-full">
-            <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
+            <Printer className="mr-1.5 h-3.5 w-3.5" /> Print / Save as PDF
           </Button>
           <Button variant="outline" size="sm" onClick={handleEmailCaregiver} className="w-full">
-            <Mail className="mr-1.5 h-3.5 w-3.5" /> Email
+            <Mail className="mr-1.5 h-3.5 w-3.5" /> Draft email
           </Button>
           <Button variant="outline" size="sm" onClick={handleCopyLink} className="w-full">
             <Share2 className="mr-1.5 h-3.5 w-3.5" /> Copy Link

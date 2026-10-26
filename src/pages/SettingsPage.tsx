@@ -104,8 +104,6 @@ export function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [homeToDelete, setHomeToDelete] = useState<string | null>(null);
-  const [reduceMotion, setReduceMotion] = useState(false);
-
   const [formData, setFormData] = useState({
     name: profile?.name || user?.displayName || '',
     email: profile?.email || user?.email || '',
@@ -114,17 +112,6 @@ export function SettingsPage() {
     notificationsEnabled: profile?.notificationsEnabled ?? true,
     privacyLevel: profile?.privacyLevel || 'Private',
     avatar: profile?.avatar || user?.photoURL || '',
-  });
-
-  const [switches, setSwitches] = useState({
-    autoDetectRooms: true,
-    saveOriginalPhotos: true,
-    emailSummaries: true,
-    newScanReports: true,
-    communityMentions: true,
-    hazardAlerts: true,
-    accountActivity: true,
-    shareAnonymizedData: true,
   });
 
   useEffect(() => {
@@ -214,6 +201,17 @@ export function SettingsPage() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to update settings");
+    }
+  };
+
+  const handleNotificationsToggle = async (enabled: boolean) => {
+    try {
+      await updateProfile({ notificationsEnabled: enabled });
+      setFormData((current) => ({ ...current, notificationsEnabled: enabled }));
+      toast.success(enabled ? "In-app notifications enabled" : "In-app notifications disabled");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update notification preference");
     }
   };
 
@@ -469,47 +467,20 @@ export function SettingsPage() {
                   <PrivacyPoint icon={Lock} title="Data security & deletion" copy="All communications use TLS/HTTPS encryption in transit. You retain full control to edit or permanently delete photos and reports from your account at any time." />
                 </SectionPanel>
 
-                <SectionPanel title="Sharing preferences">
-                  <FieldRow label="Profile Visibility" description="Who can see your profile in the community.">
-                    <Select value={formData.privacyLevel} onValueChange={(val: any) => setFormData({ ...formData, privacyLevel: val })}>
-                      <SelectTrigger className="w-36 h-10"><span>{formData.privacyLevel}</span></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Private">Private</SelectItem>
-                        <SelectItem value="Limited">Limited</SelectItem>
-                        <SelectItem value="Public">Public</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldRow>
-                  <FieldRow label="Share Anonymized Data" description="Help improve CareLens's AI with anonymous scan patterns.">
-                    <Switch checked={switches.shareAnonymizedData} onCheckedChange={(val) => setSwitches({ ...switches, shareAnonymizedData: val })} />
-                  </FieldRow>
+                <SectionPanel title="Community and data controls">
+                  <p className="py-5 text-sm leading-relaxed text-muted-foreground">
+                    Profile visibility and optional anonymized scan sharing are not configurable in this version.
+                    Avoid including sensitive personal details in community posts.
+                  </p>
                 </SectionPanel>
               </motion.div>
             )}
 
             {activeTab === 'notifications' && (
               <motion.div key="notifications" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
-                <SectionPanel title="Alert Preferences" description="Choose how and when you want to be notified.">
-                  <span className="field-tag text-muted-foreground/70 block pt-5">Channels</span>
-                  <FieldRow label="Push Notifications" description="Receive real-time alerts on your device.">
-                    <Switch checked={formData.notificationsEnabled} onCheckedChange={(val) => setFormData({ ...formData, notificationsEnabled: val })} />
-                  </FieldRow>
-                  <FieldRow label="Weekly Summaries" description="A quiet digest of activity across your homes.">
-                    <Switch checked={switches.emailSummaries} onCheckedChange={(val) => setSwitches({ ...switches, emailSummaries: val })} />
-                  </FieldRow>
-
-                  <span className="field-tag text-muted-foreground/70 block pt-8">What matters to you</span>
-                  <FieldRow label="Critical Hazards" description="Findings that need attention soon.">
-                    <Switch checked={switches.hazardAlerts} onCheckedChange={(val) => setSwitches({ ...switches, hazardAlerts: val })} />
-                  </FieldRow>
-                  <FieldRow label="Caregiver Updates" description="Changes another caregiver makes to a shared home.">
-                    <Switch checked={switches.accountActivity} onCheckedChange={(val) => setSwitches({ ...switches, accountActivity: val })} />
-                  </FieldRow>
-                  <FieldRow label="Marketplace Recommendations" description="When a relevant specialist is found nearby.">
-                    <Switch checked={switches.newScanReports} onCheckedChange={(val) => setSwitches({ ...switches, newScanReports: val })} />
-                  </FieldRow>
-                  <FieldRow label="Community Activity" description="Replies and likes on your discussions.">
-                    <Switch checked={switches.communityMentions} onCheckedChange={(val) => setSwitches({ ...switches, communityMentions: val })} />
+                <SectionPanel title="In-app notifications" description="Control the notification center in the CareLens navigation bar. This does not enable device push or email alerts.">
+                  <FieldRow label="Notification center" description="Show the in-app notification menu and its unread count. Changes save immediately.">
+                    <Switch checked={formData.notificationsEnabled} onCheckedChange={handleNotificationsToggle} />
                   </FieldRow>
                 </SectionPanel>
               </motion.div>
@@ -541,9 +512,9 @@ export function SettingsPage() {
                   <FieldRow label="Accent Color" description="CareLens's signature color, used sparingly.">
                     <div className="w-6 h-6 rounded-full bg-brand border border-border" />
                   </FieldRow>
-                  <FieldRow label="Reduce Motion" description="Minimize animations throughout the app.">
-                    <Switch checked={reduceMotion} onCheckedChange={setReduceMotion} />
-                  </FieldRow>
+                  <p className="py-5 text-sm text-muted-foreground">
+                    Motion preferences are not currently configurable.
+                  </p>
                 </SectionPanel>
               </motion.div>
             )}

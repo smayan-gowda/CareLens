@@ -20,12 +20,11 @@ export interface ScoreFormulaBreakdown {
   totalDeductions: number;
   calculatedScore: number;
   reviewedNotPresentCount: number;
-  refundedPoints: number;
 }
 
 /**
- * Computes deterministic score deductions from active visible hazards.
- * Findings marked by the user as 'not_present' do not penalize the score.
+ * Computes the original scan's deterministic deductions. User reviews do not
+ * alter the score; they remain separate evidence about the model's findings.
  */
 export function getScoreFormulaBreakdown(hazards: Hazard[]): ScoreFormulaBreakdown {
   const base = 100;
@@ -34,13 +33,10 @@ export function getScoreFormulaBreakdown(hazards: Hazard[]): ScoreFormulaBreakdo
   let mediumCount = 0;
   let lowCount = 0;
   let reviewedNotPresentCount = 0;
-  let refundedPoints = 0;
 
   for (const h of hazards) {
     if (h.feedback === "not_present") {
       reviewedNotPresentCount++;
-      refundedPoints += DEDUCTION_RATES[h.severity] || 2;
-      continue;
     }
 
     switch (h.severity) {
@@ -80,8 +76,14 @@ export function getScoreFormulaBreakdown(hazards: Hazard[]): ScoreFormulaBreakdo
     totalDeductions,
     calculatedScore,
     reviewedNotPresentCount,
-    refundedPoints,
   };
+}
+
+export function getRecordedAssessmentScore(scan: {
+  initialSafetyScore?: number;
+  safetyScore: number;
+}): number {
+  return scan.initialSafetyScore ?? scan.safetyScore;
 }
 
 /** Illustrative score scenario only; action statuses never modify measured scores. */

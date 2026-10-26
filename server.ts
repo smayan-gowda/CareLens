@@ -554,15 +554,21 @@ async function startServer() {
             }
           }
         });
-        const response = await testAi.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: "Respond with the word: READY",
-        });
+        let selectedModel = "";
+        const response = await safeGenerateContent(
+          testAi,
+          { contents: "Respond with the word: READY" },
+          {
+            onAttempt: (attempt) => {
+              if (attempt.outcome === "success") selectedModel = attempt.model;
+            },
+          }
+        );
         const latencyMs = Date.now() - startTime;
         return res.json({
           ok: true,
           provider: "gemini",
-          model: "gemini-3.8-flash",
+          model: selectedModel,
           latencyMs,
           sampleOutput: response.text?.slice(0, 50) || "READY"
         });

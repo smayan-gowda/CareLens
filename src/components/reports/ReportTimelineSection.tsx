@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { Link } from "react-router-dom";
 import type { ScanResult } from "@/types/ai";
-import { projectedScore } from "./reportMath";
+import { getRecordedAssessmentScore, projectedScore } from "./reportMath";
 
 interface ReportTimelineSectionProps {
   currentScan: ScanResult;
@@ -18,7 +18,8 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
     .filter((s) => s.status === "Completed")
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  const potential = projectedScore(currentScan.safetyScore, currentScan.recommendations);
+  const currentScore = getRecordedAssessmentScore(currentScan);
+  const potential = projectedScore(currentScore, currentScan.recommendations);
   const completedRecs = (currentScan.recommendations || []).filter(
     (recommendation) => recommendation.actionStatus === "verified"
   );
@@ -29,7 +30,7 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
     return status !== "verified" && status !== "dismissed";
   });
 
-  const scores = [...history.map((s) => s.safetyScore), potential];
+  const scores = [...history.map(getRecordedAssessmentScore), potential];
   const min = Math.min(...scores, 0);
   const max = Math.max(...scores, 100);
   const range = Math.max(1, max - min);
@@ -37,11 +38,11 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
   const points = history.map((s) => ({
     id: s.id,
     date: s.createdAt,
-    score: s.safetyScore,
+    score: getRecordedAssessmentScore(s),
     isCurrent: s.id === currentScan.id,
   }));
 
-  const hasProjection = potential > currentScan.safetyScore;
+  const hasProjection = potential > currentScore;
   const totalSlots = Math.max(1, points.length + (hasProjection ? 1 : 0) - 1);
 
   const getX = (index: number) => {
@@ -59,13 +60,13 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
         <span className="field-tag text-muted-foreground">Timeline & Trajectory</span>
         {hasProjection && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-success/15 text-success font-medium">
-            Illustrative scenario only · +{potential - currentScan.safetyScore}
+            Illustrative scenario only · +{potential - currentScore}
           </span>
         )}
       </div>
       <p className="text-muted-foreground mb-8 max-w-lg">
         {history.length > 1
-          ? "Scores change only from new assessments and reviewed findings; action updates never award score points."
+          ? "Each score is fixed from its assessment. User reviews and action updates do not change a scan's score."
           : "The solid line shows assessment results. Any dashed target is illustrative only and never changes the measured score."}
       </p>
 
@@ -94,7 +95,7 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
                   viewport={{ once: true }}
                   transition={{ duration: 0.8, delay: 0.6, ease: [0.16, 1, 0.3, 1] }}
                   x1={`${getX(points.length - 1)}%`}
-                  y1={`${getY(currentScan.safetyScore)}%`}
+                  y1={`${getY(currentScore)}%`}
                   x2="100%"
                   y2={`${getY(potential)}%`}
                   stroke="var(--success)"
@@ -165,7 +166,9 @@ export function ReportTimelineSection({ currentScan, roomScans, homeId, roomId }
                 {s.id === currentScan.id ? "Current Assessment" : "Historical Assessment"}
               </span>
             </div>
-            <span className={`tabular text-sm font-semibold ${scoreColor(s.safetyScore)}`}>{s.safetyScore}</span>
+            <span className={`tabular text-sm font-semibold ${scoreColor(getRecordedAssessmentScore(s))}`}>
+              {getRecordedAssessmentScore(s)}
+            </span>
           </Link>
         ))}
 

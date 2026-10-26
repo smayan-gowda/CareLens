@@ -29,7 +29,6 @@ import {
 import { compressImageDataUrl } from '@/utils/imageCompression';
 import { appendRecommendationAction, type RecommendationActionDetails } from '@/utils/recommendationActions';
 import { processImageForStorage } from '@/services/storageService';
-import { getScoreFormulaBreakdown } from '@/components/reports/reportMath';
 
 type ScanToPersist = Omit<ScanResult, 'id'> & { id?: string };
 
@@ -102,7 +101,12 @@ export const useScanStore = create<ScanState>()(
           const scansMap: Record<string, ScanResult[]> = {};
           
           snapshot.docs.forEach(doc => {
-            const scan = { id: doc.id, ...doc.data() } as ScanResult;
+            const scanData = doc.data() as ScanResult;
+            const scan = {
+              ...scanData,
+              id: doc.id,
+              safetyScore: scanData.initialSafetyScore ?? scanData.safetyScore,
+            };
             if (!scansMap[scan.roomId]) {
               scansMap[scan.roomId] = [];
             }
@@ -386,12 +390,10 @@ export const useScanStore = create<ScanState>()(
         });
         const updatedReviews = [...(scan.evidenceReviews ?? []), review];
 
-        const breakdown = getScoreFormulaBreakdown(updatedHazards);
-        const newSafetyScore = breakdown.calculatedScore;
-
+        const originalScore = scan.initialSafetyScore ?? scan.safetyScore;
         const updatedScan = {
           ...scan,
-          safetyScore: newSafetyScore,
+          safetyScore: originalScore,
           hazards: updatedHazards,
           evidenceReviews: updatedReviews,
         };
@@ -406,7 +408,7 @@ export const useScanStore = create<ScanState>()(
 
         try {
           await updateDoc(doc(db, 'scans', scanId), cleanUndefined({
-            safetyScore: newSafetyScore,
+            safetyScore: originalScore,
             hazards: updatedHazards,
             evidenceReviews: updatedReviews,
           }));
