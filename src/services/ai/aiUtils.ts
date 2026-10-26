@@ -69,9 +69,11 @@ export async function safeGenerateContent(
   options: { onAttempt?: (event: ModelAttemptEvent) => void } = {}
 ) {
   const modelsToTry = [
-    "google/gemma-4-31B-it",
+    "gemma-4-31b-it",
     "gemma-4-26b-a4b-it",
-    "gemini-3.8-flash"
+    "gemini-3.6-flash",
+    "gemini-3.8-flash",
+    "gemini-2.5-flash"
   ];
 
   let lastError: any = null;

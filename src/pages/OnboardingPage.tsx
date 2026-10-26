@@ -373,8 +373,8 @@ export function OnboardingPage() {
               <div className="space-y-0 border-t border-border">
                 <div className="flex items-center justify-between py-4 border-b border-border">
                   <div>
-                    <p className="text-sm font-medium">Notifications</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Get notified when a report is ready.</p>
+                    <p className="text-sm font-medium">In-app notification center</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Show notification updates inside CareLens. This does not enable push or email alerts.</p>
                   </div>
                   <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
                 </div>

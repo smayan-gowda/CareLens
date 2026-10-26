@@ -24,7 +24,7 @@ import { AssessmentComparison } from "@/components/reports/AssessmentComparison"
 import { EvidenceJourney } from "@/components/reports/EvidenceJourney";
 import { getSampleAssessment } from "@/data/sampleAssessments";
 import type { EvidenceReview, EvidenceReviewStatus, Hazard, ScanResult } from "@/types/ai";
-import { getScoreFormulaBreakdown } from "@/components/reports/reportMath";
+import { getRecordedAssessmentScore } from "@/components/reports/reportMath";
 import { analyzeSpatialRelationships } from "@/services/ai/spatialAnalyzer";
 import type { SpatialFindingReviewStatus } from "@/types/ai";
 import { toast } from "sonner";
@@ -277,23 +277,23 @@ export function ReportPage() {
     });
   };
 
-  const calculatedScore = useMemo(() => {
-    if (!activeHazards || activeHazards.length === 0) return rawScan?.safetyScore || 100;
-    const breakdown = getScoreFormulaBreakdown(activeHazards);
-    return breakdown.calculatedScore;
-  }, [activeHazards, rawScan]);
+  const recordedScore = useMemo(
+    () => (rawScan ? getRecordedAssessmentScore(rawScan) : 100),
+    [rawScan]
+  );
 
-  // Construct active dynamic scan object with user feedbacks and adjusted score
+  // Keep the scan score fixed; user reviews are stored independently as evidence.
   const dynamicScan = useMemo<ScanResult | null>(() => {
     if (!rawScan) return null;
     return {
       ...rawScan,
-      safetyScore: calculatedScore,
+      safetyScore: recordedScore,
+      initialSafetyScore: recordedScore,
       hazards: activeHazards,
       spatialFindings: activeSpatialFindings,
       evidenceReviews: activeEvidenceReviews,
     };
-  }, [rawScan, calculatedScore, activeHazards, activeSpatialFindings, activeEvidenceReviews]);
+  }, [rawScan, recordedScore, activeHazards, activeSpatialFindings, activeEvidenceReviews]);
 
   const reportPhotos = useMemo(
     () =>
@@ -345,7 +345,7 @@ export function ReportPage() {
           new Date(s.createdAt) < new Date(dynamicScan.createdAt)
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return priorCompleted[0]?.safetyScore;
+    return priorCompleted[0] ? getRecordedAssessmentScore(priorCompleted[0]) : undefined;
   }, [roomScans, dynamicScan]);
 
   if (scanLoading || homeLoading) {

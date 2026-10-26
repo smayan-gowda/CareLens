@@ -11,9 +11,11 @@ import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function NotificationCenter() {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const { notifications, markNotificationRead, clearNotifications } = useHomeStore();
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  if (profile?.notificationsEnabled === false) return null;
 
   const getIcon = (type: string) => {
     switch (type) {

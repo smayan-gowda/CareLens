@@ -154,7 +154,10 @@ describe('scan lifecycle with pipeline trace', () => {
     expect(persistedFirstScan.id).toBe(firstScanId);
     expect(persistedFirstScan.pipelineTrace?.persistenceStatus).toBe('saved');
 
-    useScanStore.setState({ scans: { 'room-1': [persistedFirstScan] } });
+    const originalScore = persistedFirstScan.initialSafetyScore ?? persistedFirstScan.safetyScore;
+    useScanStore.setState({
+      scans: { 'room-1': [{ ...persistedFirstScan, safetyScore: originalScore - 5 }] },
+    });
     const hazardId = persistedFirstScan.hazards[0].id;
     const review = await useScanStore.getState().updateHazardFeedback(firstScanId, hazardId, 'helpful');
     expect(review).toMatchObject({
@@ -165,7 +168,16 @@ describe('scan lifecycle with pipeline trace', () => {
       imageId: 'photo-before',
     });
     expect(useScanStore.getState().getScanById(firstScanId)?.evidenceReviews).toContainEqual(review);
+    expect(useScanStore.getState().getScanById(firstScanId)?.safetyScore).toBe(originalScore);
     expect(firestoreMocks.updateDoc).toHaveBeenCalled();
+
+    await useScanStore.getState().updateHazardFeedback(firstScanId, hazardId, 'not_present');
+    expect(useScanStore.getState().getScanById(firstScanId)?.safetyScore).toBe(originalScore);
+    expect(firestoreMocks.updateDoc).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ safetyScore: originalScore })
+    );
+    await useScanStore.getState().updateHazardFeedback(firstScanId, hazardId, 'helpful');
 
     const recommendationId = persistedFirstScan.recommendations[0].id;
     const scoreBeforeAction = useScanStore.getState().getScanById(firstScanId)?.safetyScore;

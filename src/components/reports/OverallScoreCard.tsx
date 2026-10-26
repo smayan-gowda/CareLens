@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { ScanResult } from "@/types/ai";
-import { projectedScore, getScoreFormulaBreakdown } from "./reportMath";
+import { projectedScore, getRecordedAssessmentScore, getScoreFormulaBreakdown } from "./reportMath";
 import { Info, Calculator, ShieldCheck, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -39,8 +39,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
     return getScoreFormulaBreakdown(scan.hazards || []);
   }, [scan.hazards]);
 
-  // Use the calculated deterministic score if hazards are present, or the scan's recorded score
-  const score = scan.hazards && scan.hazards.length > 0 ? breakdown.calculatedScore : scan.safetyScore;
+  const score = getRecordedAssessmentScore(scan);
   const ratingText = score >= 85 ? "Good Baseline" : score >= 60 ? "Needs Attention" : "Urgent Hazards Flagged";
   const potential = projectedScore(score, scan.recommendations || []);
   const delta = typeof previousScore === "number" ? score - previousScore : null;
@@ -55,7 +54,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
   return (
     <div id="overview" className="scroll-mt-24 space-y-6">
       <div className="flex items-center justify-between">
-        <span className="field-tag text-muted-foreground block">Preliminary Safety Index</span>
+        <span className="field-tag text-muted-foreground block">Original Scan Safety Index</span>
         <button
           onClick={() => setShowFormula(!showFormula)}
           className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline font-medium cursor-pointer"
@@ -104,15 +103,15 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
 
           <div className="mt-4 pt-4 border-t border-border/60 text-xs text-muted-foreground space-y-1">
             <div className="flex justify-between">
-              <span>Active hazards detected:</span>
+              <span>Findings in original scan:</span>
               <span className="tabular font-semibold text-foreground">
-                {(scan.hazards || []).filter((h) => h.feedback !== "not_present").length}
+                {(scan.hazards || []).length}
               </span>
             </div>
             {breakdown.reviewedNotPresentCount > 0 && (
               <div className="flex justify-between text-success">
-                <span>Items verified 'Not Present':</span>
-                <span className="tabular font-semibold">+{breakdown.refundedPoints} pts restored</span>
+                <span>User review:</span>
+                <span className="font-semibold">Score unchanged</span>
               </div>
             )}
           </div>
@@ -153,7 +152,8 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
               <strong className="text-foreground font-medium">Important Safety Context:</strong> This score is a
               preliminary visual index based on objects identified in submitted photos. A high score does not
               guarantee the room is completely free of slip hazards, loose handrails, or non-visible electrical/structural risks.
-              Recommendation status and completion never change the measured score; a new assessment is required to measure changes.
+              This preliminary visual index is fixed when the scan is created. User reviews can dispute findings,
+              but do not recalculate the score; only a new assessment produces a new score.
             </p>
           </div>
         </div>
@@ -173,14 +173,14 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <div className="flex items-center gap-2">
                   <Calculator className="w-4 h-4 text-brand" />
-                  <h4 className="font-semibold text-foreground">Deductive Scoring Formula Breakdown</h4>
+                  <h4 className="font-semibold text-foreground">Original Scan Score Formula</h4>
                 </div>
                 <span className="text-xs text-muted-foreground font-mono">100 - Total Deductions = Score</span>
               </div>
 
               <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 pt-1">
                 <div className="p-3 bg-muted/40 rounded-lg border border-border/50">
-                  <div className="text-xs text-muted-foreground">Critical Hazards (-15 ea)</div>
+                  <div className="text-xs text-muted-foreground">Critical findings (-15 ea)</div>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="tabular font-medium text-foreground">{breakdown.criticalCount} detected</span>
                     <span className="tabular font-semibold text-destructive">-{breakdown.criticalDeduction}</span>
@@ -188,7 +188,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
                 </div>
 
                 <div className="p-3 bg-muted/40 rounded-lg border border-border/50">
-                  <div className="text-xs text-muted-foreground">High Concerns (-10 ea)</div>
+                  <div className="text-xs text-muted-foreground">High findings (-10 ea)</div>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="tabular font-medium text-foreground">{breakdown.highCount} detected</span>
                     <span className="tabular font-semibold text-warning">-{breakdown.highDeduction}</span>
@@ -196,7 +196,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
                 </div>
 
                 <div className="p-3 bg-muted/40 rounded-lg border border-border/50">
-                  <div className="text-xs text-muted-foreground">Medium Attention (-5 ea)</div>
+                  <div className="text-xs text-muted-foreground">Medium findings (-5 ea)</div>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="tabular font-medium text-foreground">{breakdown.mediumCount} detected</span>
                     <span className="tabular font-semibold text-warning">-{breakdown.mediumDeduction}</span>
@@ -204,7 +204,7 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
                 </div>
 
                 <div className="p-3 bg-muted/40 rounded-lg border border-border/50">
-                  <div className="text-xs text-muted-foreground">Low / Minor Notes (-2 ea)</div>
+                  <div className="text-xs text-muted-foreground">Low findings (-2 ea)</div>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="tabular font-medium text-foreground">{breakdown.lowCount} detected</span>
                     <span className="tabular font-semibold text-muted-foreground">-{breakdown.lowDeduction}</span>
@@ -218,10 +218,10 @@ export function OverallScoreCard({ scan, previousScore }: OverallScoreCardProps)
                   {" - "}
                   Total Deductions: <span className="tabular font-semibold text-destructive">-{breakdown.totalDeductions}</span>
                   {" = "}
-                  Current Score: <span className="tabular font-semibold text-foreground">{score}</span>
+                  Original Scan Score: <span className="tabular font-semibold text-foreground">{score}</span>
                 </div>
                 <div className="text-[11px] text-muted-foreground italic">
-                  Marking a finding "Not Present" automatically restores deducted points in the report.
+                  A user review does not change this original scan score.
                 </div>
               </div>
             </div>

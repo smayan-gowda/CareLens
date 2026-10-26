@@ -36,12 +36,6 @@ import {
  X
 } from "lucide-react";
 import { toast } from "sonner";
-import { 
- generateLocalizedFallbackBusinesses, 
- hashSearchCoordinates,
- calculateDistance,
- CATEGORY_COLORS
-} from "@/data/resourceTemplates";
 import { getMatchReasons, matchLabel } from "@/components/marketplace/matchReasons";
 import L from "leaflet";
 
@@ -271,9 +265,6 @@ export function ResourcesPage() {
  const [searchRadius] = useState<number>(15); // miles
  const [minRating] = useState<number>(0);
  const [priceLevel] = useState<number | null>(null);
- const [openNow] = useState(false);
- const [ecoFriendlyOnly] = useState(false);
- const [fastestAvailabilityOnly] = useState(false);
  const [sortBy] = useState<'match' | 'rating' | 'distance' | 'popularity'>('match');
 
  // Mobile split toggle (Zillow/Airbnb style list vs map on small screens)
@@ -282,8 +273,15 @@ export function ResourcesPage() {
  // Business Results State
  const [liveProviders, setLiveProviders] = useState<any[]>([]);
  const [isLoading, setIsLoading] = useState(false);
+ const [providerSearchUnavailable, setProviderSearchUnavailable] = useState(false);
  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
  const [savedItems, setSavedItems] = useState<any[]>([]);
+ const savedProviderItems = savedItems.filter(
+ item => item.type === "provider" && item.resourceData?.isYelp === true && String(item.resourceId).startsWith("yelp_")
+ );
+ const unavailableSavedProviderItems = savedItems.filter(
+ item => item.type === "provider" && !savedProviderItems.includes(item)
+ );
 
  // Leaflet Interactive Map References
  const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -328,7 +326,7 @@ export function ResourcesPage() {
  return () => unsubscribe();
  }, [user]);
 
- // Call OSRM to get precise road driving distances and duration in minutes
+ // Call OSRM for optional road-route estimates; never synthesize a travel time.
  const getDrivingRoutes = async (origin: { lat: number; lng: number }, destinations: { lat: number; lng: number }[]) => {
  if (destinations.length === 0) return [];
  try {
@@ -354,7 +352,7 @@ export function ResourcesPage() {
  });
  }
  } catch (error) {
- console.warn("OSRM table routing failed, using mathematical fallbacks:", error);
+ console.warn("OSRM route estimates are unavailable:", error);
  }
  return null;
  };
@@ -365,6 +363,7 @@ export function ResourcesPage() {
  
  const loadData = async () => {
  setIsLoading(true);
+ setProviderSearchUnavailable(false);
  try {
  const params = getYelpParamsForCategory(selectedCategory);
  
@@ -411,9 +410,9 @@ export function ResourcesPage() {
  categories: b.categories.map((c: any) => c.title),
  rating: b.rating,
  reviewsCount: b.review_count,
- phone: b.display_phone || b.phone || "No phone listed",
+ phone: b.display_phone || b.phone || "",
  website: b.url,
- address: b.location.display_address?.join(", ") || b.location.address1 || "Local address",
+ address: b.location.display_address?.join(", ") || b.location.address1 || "",
  lat: b.coordinates.latitude,
  lng: b.coordinates.longitude,
  distance: dist,
@@ -421,47 +420,19 @@ export function ResourcesPage() {
  specialties,
  isYelp: true,
  priceLevel: b.price ? b.price.length : null,
- openHours: b.is_closed ? "Closed" : "Open Now",
- ecoFriendly: Math.random() > 0.5, // simulate green practices
- fastestAvailability: Math.random() > 0.4, // simulate response rates
  image: b.image_url
  };
  });
  
  setLiveProviders(mapped);
  } else {
- // Fall back to simulated local templates
- const fallbacks = generateLocalizedFallbackBusinesses(coords.lat, coords.lng, activeCityName);
- const destCoords = fallbacks.map((f: any) => ({ lat: f.lat, lng: f.lng }));
- const routingData = await getDrivingRoutes(coords, destCoords);
- if (!isMounted) return;
- 
- const mapped = fallbacks.map((f: any, idx: number) => {
- let dist = f.distance;
- let durationMin = null;
- if (routingData && routingData[idx]) {
- if (routingData[idx].miles !== null) dist = routingData[idx].miles;
- if (routingData[idx].minutes !== null) durationMin = routingData[idx].minutes;
- }
- return {
- ...f,
- distance: dist,
- durationMinutes: durationMin,
- isYelp: false
- };
- });
- 
- setLiveProviders(mapped);
+ setLiveProviders([]);
  }
  } catch (err) {
  console.error("Error loading resources:", err);
- // Fall back to robust simulated business list to ensure app never crashes
  if (isMounted) {
- const fallbacks = generateLocalizedFallbackBusinesses(coords.lat, coords.lng, activeCityName).map(f => ({
- ...f,
- isYelp: false
- }));
- setLiveProviders(fallbacks);
+ setLiveProviders([]);
+ setProviderSearchUnavailable(true);
  }
  } finally {
  if (isMounted) setIsLoading(false);
@@ -560,36 +531,6 @@ export function ResourcesPage() {
  mapInstanceRef.current = map;
  markersGroupRef.current = markersGroup;
  }, [activeTab]);
-
- // Helper Unsplash category visualizer
- const getBusinessPhoto = (provider: any) => {
- if (provider.image) return provider.image;
- 
- const category = provider.categories?.[0] || "Contractor";
- const catLower = category.toLowerCase();
- if (catLower.includes("plumb")) {
- return "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?auto=format&fit=crop&q=80&w=400";
- }
- if (catLower.includes("electric")) {
- return "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&q=80&w=400";
- }
- if (catLower.includes("floor") || catLower.includes("tile")) {
- return "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?auto=format&fit=crop&q=80&w=400";
- }
- if (catLower.includes("paint") || catLower.includes("coat")) {
- return "https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&q=80&w=400";
- }
- if (catLower.includes("light") || catLower.includes("illuminate")) {
- return "https://images.unsplash.com/photo-1565814636199-ae8133055c1c?auto=format&fit=crop&q=80&w=400";
- }
- if (catLower.includes("hardware") || catLower.includes("store") || catLower.includes("supply")) {
- return "https://images.unsplash.com/photo-1530124566582-ab0510450c80?auto=format&fit=crop&q=80&w=400";
- }
- if (catLower.includes("design") || catLower.includes("interior")) {
- return "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=400";
- }
- return "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=400"; // neutral handyman/construction
- };
 
  // Strict category matching filter for robust, targeted directory lookups
  const doesProviderMatchCategoryStrictly = (provider: any, category: string): boolean => {
@@ -848,35 +789,12 @@ export function ResourcesPage() {
  });
  }
 
- // Apply Open Now filter
- if (openNow) {
- result = result.filter((p) => {
- if (p.is_closed !== undefined) return !p.is_closed;
- return p.openHours && p.openHours !== "Closed";
- });
- }
-
- // Apply eco-friendly filter
- if (ecoFriendlyOnly) {
- result = result.filter((p) => p.ecoFriendly === true || p.specialties.some((s: string) => s.toLowerCase().includes("eco") || s.toLowerCase().includes("green") || s.toLowerCase().includes("sust")));
- }
-
- // Apply availability filter
- if (fastestAvailabilityOnly) {
- result = result.filter((p) => p.fastestAvailability === true || p.specialties.some((s: string) => s.toLowerCase().includes("emergency") || s.toLowerCase().includes("same day") || s.toLowerCase().includes("rapid") || s.toLowerCase().includes("fast")));
- }
-
  // Map match scores
  const scored = result.map(p => {
  const matchScore = calculateMatchScore(p, latestScan);
- const driveTime = p.durationMinutes !== undefined && p.durationMinutes !== null 
- ? p.durationMinutes 
- : Math.max(3, Math.round(p.distance * 2.3 + 2)); // highly realistic fallback formula
- 
  return {
  ...p,
- matchScore,
- driveTime
+ matchScore
  };
  });
 
@@ -898,9 +816,6 @@ export function ResourcesPage() {
  searchRadius,
  minRating,
  priceLevel,
- openNow,
- ecoFriendlyOnly,
- fastestAvailabilityOnly,
  sortBy,
  coords,
  latestScan
@@ -1058,12 +973,12 @@ export function ResourcesPage() {
  }
  };
 
- // Handle Nominatim forward geocoding + robust deterministic fallback
+ // Handle Nominatim forward geocoding without inventing coordinates on failure.
  const handleSearchSubmit = async () => {
  if (!locationQuery.trim()) return;
  
  setIsLoading(true);
- toast.loading(`Geocoding coordinates for: ${locationQuery}...`);
+ const toastId = toast.loading(`Searching for: ${locationQuery}...`);
  
  try {
  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=1`;
@@ -1073,31 +988,38 @@ export function ResourcesPage() {
  }
  });
  
- toast.dismiss();
- 
  if (response.ok) {
  const data = await response.json();
  if (data && data.length > 0) {
  const result = data[0];
  const displayStr = result.display_name.split(",")[0] + ", " + (result.display_name.split(",")[1] || "").trim();
- 
+ const latitude = Number.parseFloat(result.lat);
+ const longitude = Number.parseFloat(result.lon);
+ if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+     latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+   toast.dismiss(toastId);
+   toast.error("The location service returned invalid coordinates. The map location was not changed.");
+   setIsLoading(false);
+   return;
+ }
  setActiveCityName(displayStr);
- setCoords({ lat: parseFloat(result.lat), lng: parseFloat(result.lon) });
+ setCoords({ lat: latitude, lng: longitude });
+ toast.dismiss(toastId);
  toast.success(`Centered discovery map on ${displayStr}`);
  setIsLoading(false);
  return;
  }
+  toast.dismiss(toastId);
+  toast.error("No matching location was found. The map location was not changed.");
+  setIsLoading(false);
+  return;
  }
  } catch (err) {
- console.warn("Nominatim service rate-limited, engaging high-fidelity local lookup:", err);
+ console.warn("Location search unavailable:", err);
  }
  
- // Smooth high-fidelity fallback to ensure app NEVER breaks for the user
- toast.dismiss();
- const loc = hashSearchCoordinates(locationQuery);
- setActiveCityName(loc.name);
- setCoords({ lat: loc.lat, lng: loc.lng });
- toast.success(`Centered search on ${loc.name} (Local approximation)`);
+ toast.dismiss(toastId);
+ toast.error("Location search is unavailable. The map location was not changed.");
  setIsLoading(false);
  };
 
@@ -1518,6 +1440,12 @@ export function ResourcesPage() {
  )}
  </div>
  
+ {activeTab === 'local' && (
+ <p className="text-xs text-muted-foreground">
+ Live specialist listings are provided by Yelp. Route times are shown only when available.
+ </p>
+ )}
+
  {activeTab !== 'saved' && (
  <div className="flex gap-2 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth">
  {AVAILABLE_CATEGORIES.map(catName => {
@@ -1578,8 +1506,20 @@ export function ResourcesPage() {
  <ShoppingBag className="w-5 h-5 text-muted-foreground/50" strokeWidth={1.5} />
  </div>
  <div>
- <p className="text-sm font-medium">Nothing matches yet</p>
- <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">Try a wider radius or clearing a filter.</p>
+ <p className="text-sm font-medium">
+ {providerSearchUnavailable
+ ? "Live specialist search is unavailable"
+ : liveProviders.length === 0
+ ? "No specialists found"
+ : "Nothing matches this search"}
+ </p>
+ <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+ {providerSearchUnavailable
+ ? "The directory could not be reached. No example businesses are shown as real listings."
+ : liveProviders.length === 0
+ ? "The live directory returned no specialists for this area and category."
+ : "Try a different search or clear the filters."}
+ </p>
  </div>
   <Button id="reset-filters-btn" variant="outline" size="sm" onClick={() => {
     setSelectedCategory("All");
@@ -1605,12 +1545,18 @@ export function ResourcesPage() {
  >
  <div className="flex gap-4">
  <div className="w-24 h-24 shrink-0 overflow-hidden bg-muted relative">
+ {prov.image ? (
  <img
  referrerPolicy="no-referrer"
- src={getBusinessPhoto(prov)}
+ src={prov.image}
  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
- alt={prov.name}
+ alt={`Photo provided for ${prov.name}`}
  />
+ ) : (
+ <div className="w-full h-full flex items-center justify-center text-muted-foreground/50" aria-label="No provider photo available">
+ <ShoppingBag className="w-6 h-6" />
+ </div>
+ )}
  </div>
 
  <div className="flex-1 min-w-0">
@@ -1644,14 +1590,13 @@ export function ResourcesPage() {
  <Star className="w-3 h-3 fill-warning text-warning" /> {prov.rating}
  </span>
  <span className="text-muted-foreground">({prov.reviewsCount})</span>
- <span className={prov.openHours && prov.openHours !== "Closed" ? "text-success" : "text-muted-foreground"}>
- {prov.openHours && prov.openHours !== "Closed" ? "Open now" : "Closed"}
- </span>
  </div>
 
  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
- <span className="flex items-center gap-1"><Car className="w-3 h-3" /> {prov.distance.toFixed(1)} mi</span>
- <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {prov.driveTime} min</span>
+ <span className="flex items-center gap-1"><Car className="w-3 h-3" /> About {prov.distance.toFixed(1)} mi away</span>
+ {prov.durationMinutes !== null && prov.durationMinutes !== undefined && (
+ <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> About {prov.durationMinutes} min by car</span>
+ )}
  </div>
  </div>
  </div>
@@ -1695,12 +1640,18 @@ export function ResourcesPage() {
  className="absolute bottom-5 left-5 right-5 bg-card/98 backdrop-blur-md border border-border shadow-[var(--elevation-floating)] z-10 overflow-hidden"
  >
  <div className="flex gap-4 p-5">
+ {selectedProvider.image ? (
  <img
  referrerPolicy="no-referrer"
- src={getBusinessPhoto(selectedProvider)}
+ src={selectedProvider.image}
  className="w-20 h-20 object-cover shrink-0"
- alt={selectedProvider.name}
+ alt={`Photo provided for ${selectedProvider.name}`}
  />
+ ) : (
+ <div className="w-20 h-20 shrink-0 bg-muted flex items-center justify-center text-muted-foreground/50" aria-label="No provider photo available">
+ <ShoppingBag className="w-6 h-6" />
+ </div>
+ )}
  <div className="flex-1 min-w-0">
  <div className="flex items-start justify-between gap-3">
  <div className="min-w-0">
@@ -1718,17 +1669,24 @@ export function ResourcesPage() {
  <span className="flex items-center justify-end gap-1 text-sm font-medium">
  <Star className="w-3.5 h-3.5 fill-warning text-warning" /> {selectedProvider.rating}
  </span>
- <span className="text-xs text-muted-foreground block mt-0.5">{selectedProvider.distance.toFixed(1)} mi · {selectedProvider.driveTime ?? Math.round(selectedProvider.distance * 2.3 + 2)} min</span>
+ <span className="text-xs text-muted-foreground block mt-0.5">
+ About {selectedProvider.distance.toFixed(1)} mi away
+ {selectedProvider.durationMinutes !== null && selectedProvider.durationMinutes !== undefined
+ ? ` · about ${selectedProvider.durationMinutes} min by car`
+ : ""}
+ </span>
  </div>
  </div>
 
  <div className="flex gap-2 mt-3">
+ {selectedProvider.phone && (
  <a
  href={`tel:${selectedProvider.phone}`}
  className="flex-1 flex items-center justify-center gap-1.5 h-9 bg-foreground text-background text-xs font-medium hover:brightness-110 active:scale-[0.98] transition-all"
  >
  <Phone className="w-3.5 h-3.5" /> Call
  </a>
+ )}
  <a
  href={`https://www.google.com/maps/dir/?api=1&destination=${selectedProvider.lat},${selectedProvider.lng}`}
  target="_blank"
@@ -1770,6 +1728,26 @@ export function ResourcesPage() {
  transition={{ duration: 0.15 }}
  className="absolute inset-0 p-6 overflow-y-auto space-y-6"
  >
+ {unavailableSavedProviderItems.length > 0 && (
+ <div className="border border-warning/40 bg-warning/5 p-4 space-y-3">
+ <p className="text-sm font-medium">Some saved specialist listings are no longer verified.</p>
+ <p className="text-xs text-muted-foreground">
+ {unavailableSavedProviderItems.length} previously saved listing{unavailableSavedProviderItems.length === 1 ? " is" : "s are"} hidden because it cannot be confirmed as a live directory result.
+ </p>
+ <div className="flex flex-wrap gap-2">
+ {unavailableSavedProviderItems.map((item) => (
+ <Button
+ key={item.firestoreId}
+ variant="outline"
+ size="sm"
+ onClick={() => handleToggleSave(item.resourceData || { id: item.resourceId }, "provider")}
+ >
+ Remove unverified listing
+ </Button>
+ ))}
+ </div>
+ </div>
+ )}
  {savedItems.length === 0 ? (
  <div className="flex flex-col items-center justify-center text-center py-20">
  <div className="w-12 h-12 border border-border flex items-center justify-center mb-4">
@@ -1784,14 +1762,13 @@ export function ResourcesPage() {
  <div className="space-y-6">
  
  {/* Saved Local Specialists */}
- {savedItems.some(i => i.type === 'provider') && (
+ {savedProviderItems.length > 0 && (
  <div className="space-y-4">
  <span className="field-tag text-muted-foreground flex items-center gap-2">
  <MapPin className="w-3.5 h-3.5" /> Saved specialists
  </span>
  <div className="grid sm:grid-cols-2 gap-px bg-border border border-border">
- {savedItems
- .filter(i => i.type === 'provider')
+ {savedProviderItems
  .map(item => {
  const prov = item.resourceData;
  return (
@@ -1819,9 +1796,9 @@ export function ResourcesPage() {
  <span className="flex items-center gap-1 font-medium">
  <Star className="w-3.5 h-3.5 fill-warning text-warning" /> {prov.rating}
  </span>
- <a href={`tel:${prov.phone}`} className="text-brand font-medium flex items-center gap-1 hover:underline">
+ {prov.phone && <a href={`tel:${prov.phone}`} className="text-brand font-medium flex items-center gap-1 hover:underline">
  <Phone className="w-3 h-3" /> Call
- </a>
+ </a>}
  </div>
  </div>
  );
