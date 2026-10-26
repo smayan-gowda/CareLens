@@ -44,7 +44,7 @@ export function RecommendationBlocks({
   onSelectHazard,
   onSelectSpatialFinding,
 }: RecommendationBlocksProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(recommendations[0]?.id ?? null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (recommendations.length === 0) {
     return (

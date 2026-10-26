@@ -150,6 +150,23 @@ export function EvidenceJourney({
 
             return (
               <li key={photo.id} className="overflow-hidden rounded-xl border border-border bg-card">
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center gap-4 p-3 transition-colors hover:bg-muted/30 [&::-webkit-details-marker]:hidden">
+                    <img src={photo.image} alt="" className="h-16 w-24 shrink-0 rounded-md object-cover" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+                        Photo {String(index + 1).padStart(2, '0')} · {photo.role}
+                      </span>
+                      <span className="mt-1 block truncate text-sm font-semibold text-foreground">{photo.label}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {observations.length} observations · {relations.length} relationships · {photoHazards.length} concerns · {photoRecommendations.length} actions
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-medium text-brand group-open:hidden">Show details</span>
+                    <span className="hidden shrink-0 text-xs font-medium text-brand group-open:inline">Hide details</span>
+                  </summary>
+                  <div className="border-t border-border">
                 <div className="grid gap-0 md:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.6fr)]">
                   <button
                     type="button"
@@ -235,6 +252,8 @@ export function EvidenceJourney({
                     </div>
                   </div>
                 </div>
+                  </div>
+                </details>
               </li>
             );
           })}

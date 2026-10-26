@@ -223,7 +223,21 @@ export function SpatialFindings({
           </span>
         </p>
       )}
-      <SpatialMap findings={visibleFindings} detectedObjects={visibleObjects} />
+      <p className="text-xs text-muted-foreground">
+        {visibleFindings.length} relationships available for review. Expand a row to see the evidence and review controls.
+      </p>
+      {visibleObjects.length > 0 && (
+        <details className="group rounded-xl border border-border bg-card p-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            <span>Relationship map · {visibleObjects.length} detected objects</span>
+            <span className="shrink-0 text-xs font-medium text-brand group-open:hidden">Show map</span>
+            <span className="hidden shrink-0 text-xs font-medium text-brand group-open:inline">Hide map</span>
+          </summary>
+          <div className="pt-4">
+            <SpatialMap findings={visibleFindings} detectedObjects={visibleObjects} />
+          </div>
+        </details>
+      )}
       {visibleFindings.length === 0 ? (
         <div className="border-y border-border py-5 text-sm text-muted-foreground">
           No supported spatial relationships were identified in this photo.
@@ -233,12 +247,24 @@ export function SpatialFindings({
       ) : (
         <div className="divide-y divide-border border-y border-border">
           {visibleFindings.map((finding) => (
-            <article
+            <details
               key={finding.id}
-              className={`py-5 space-y-3 transition-colors ${
+              className={`group py-5 transition-colors ${
                 selectedFindingId === finding.id ? 'bg-brand/5 -mx-3 px-3 rounded-lg' : ''
               }`}
             >
+              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                <span>{relationLabels[finding.relationType]}</span>
+                <span className={`rounded-full px-2 py-1 text-xs ${statusStyles[finding.evidenceStatus]}`}>
+                  {finding.evidenceStatus}
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {finding.objectsInvolved.join(' and ')}
+                </span>
+                <span className="ml-auto text-xs font-medium text-brand group-open:hidden">Review details</span>
+                <span className="ml-auto hidden text-xs font-medium text-brand group-open:inline">Hide details</span>
+              </summary>
+              <div className="space-y-3 pt-3">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -340,7 +366,8 @@ export function SpatialFindings({
                   </span>
                 )}
               </div>
-            </article>
+              </div>
+            </details>
           ))}
         </div>
       )}

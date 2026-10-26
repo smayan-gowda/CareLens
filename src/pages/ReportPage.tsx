@@ -85,7 +85,7 @@ export function ReportPage() {
   useEffect(() => {
     if (rawScan?.hazards) {
       setActiveHazards(rawScan.hazards);
-      setSelectedHazardId(rawScan.hazards[0]?.id ?? null);
+      setSelectedHazardId(null);
     }
     setActiveEvidenceReviews(rawScan?.evidenceReviews ?? []);
   }, [rawScan]);
