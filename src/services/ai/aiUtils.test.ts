@@ -5,9 +5,15 @@ describe("AI Utilities", () => {
   describe("retryWithBackoff", () => {
     it("should succeed on first try", async () => {
       const operation = vi.fn().mockResolvedValue("success");
-      const result = await retryWithBackoff(operation, 3, 10, "test-model");
+      const onAttempt = vi.fn();
+      const result = await retryWithBackoff(operation, 3, 10, "test-model", onAttempt);
       expect(result).toBe("success");
       expect(operation).toHaveBeenCalledTimes(1);
+      expect(onAttempt).toHaveBeenCalledWith({
+        model: "test-model",
+        attempt: 1,
+        outcome: "success",
+      });
     });
 
     it("should retry on transient errors and eventually succeed", async () => {
@@ -15,10 +21,17 @@ describe("AI Utilities", () => {
         .mockRejectedValueOnce({ status: 500, message: "Internal Error" })
         .mockRejectedValueOnce({ status: 429, message: "Quota Exceeded" })
         .mockResolvedValue("success");
+      const onAttempt = vi.fn();
       
-      const result = await retryWithBackoff(operation, 3, 10, "test-model");
+      const result = await retryWithBackoff(operation, 3, 10, "test-model", onAttempt);
       expect(result).toBe("success");
       expect(operation).toHaveBeenCalledTimes(3);
+      expect(onAttempt.mock.calls.map(([event]) => event.outcome)).toEqual([
+        "retryable_failure",
+        "retryable_failure",
+        "success",
+      ]);
+      expect(JSON.stringify(onAttempt.mock.calls)).not.toContain("Internal Error");
     });
 
     it("should fail after max retries", async () => {
@@ -47,30 +60,72 @@ describe("AI Utilities", () => {
       };
     });
 
-    it("should succeed with primary model (gemma-4-31b-it)", async () => {
+    it("should succeed with primary model (google/gemma-4-31B-it)", async () => {
       mockAi.models.generateContent.mockResolvedValue("primary-success");
       const result = await safeGenerateContent(mockAi, { contents: [] });
       expect(result).toBe("primary-success");
-      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemma-4-31b-it" }));
+      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "google/gemma-4-31B-it" }));
     });
 
-    it("should fallback to secondary model (gemma-4-31b) if primary fails", async () => {
+    it("should fall back to Gemma 4 26B when Gemma 4 31B fails", async () => {
       mockAi.models.generateContent.mockImplementation(({ model }: { model: string }) => {
-        if (model === "gemma-4-31b-it") {
-          return Promise.reject({ status: 500, message: "Gemma 4 Failed" });
+        if (model === "google/gemma-4-31B-it") {
+          return Promise.reject({ status: 400, message: "Gemma 4 31B unavailable" });
         }
-        return Promise.resolve("fallback-success");
+        return Promise.resolve("gemma-26b-success");
       });
 
       const result = await safeGenerateContent(mockAi, { contents: [] });
-      expect(result).toBe("fallback-success");
-      expect(mockAi.models.generateContent).toHaveBeenCalledWith(expect.objectContaining({ model: "gemma-4-31b" }));
+      expect(result).toBe("gemma-26b-success");
+      expect(mockAi.models.generateContent.mock.calls.map(([params]) => params.model)).toEqual([
+        "google/gemma-4-31B-it",
+        "gemma-4-26b-a4b-it",
+      ]);
+    });
+
+    it("should record model fallback attempts without provider messages", async () => {
+      mockAi.models.generateContent.mockImplementation(({ model }: { model: string }) => {
+        if (model === "google/gemma-4-31B-it") {
+          return Promise.reject({ status: 400, message: "Private provider response" });
+        }
+        return Promise.resolve("fallback-success");
+      });
+      const onAttempt = vi.fn();
+
+      await safeGenerateContent(mockAi, { contents: [] }, { onAttempt });
+
+      expect(onAttempt.mock.calls.map(([event]) => ({
+        model: event.model,
+        outcome: event.outcome,
+        errorCode: event.errorCode,
+      }))).toEqual([
+        { model: "google/gemma-4-31B-it", outcome: "model_failure", errorCode: "http_400" },
+        { model: "gemma-4-26b-a4b-it", outcome: "success", errorCode: undefined },
+      ]);
+      expect(JSON.stringify(onAttempt.mock.calls)).not.toContain("Private provider response");
+    });
+
+    it("should fall back to Gemini if both Gemma models fail", async () => {
+      mockAi.models.generateContent.mockImplementation(({ model }: { model: string }) => {
+        if (model !== "gemini-3.8-flash") {
+          return Promise.reject({ status: 400, message: "Gemma model unavailable" });
+        }
+        return Promise.resolve("gemini-success");
+      });
+
+      const result = await safeGenerateContent(mockAi, { contents: [] });
+      expect(result).toBe("gemini-success");
+      expect(mockAi.models.generateContent.mock.calls.map(([params]) => params.model)).toEqual([
+        "google/gemma-4-31B-it",
+        "gemma-4-26b-a4b-it",
+        "gemini-3.8-flash",
+      ]);
     });
 
     it("should fail if all models fail", async () => {
-      mockAi.models.generateContent.mockRejectedValue({ status: 500, message: "All Failed" });
+      mockAi.models.generateContent.mockRejectedValue({ status: 400, message: "All Failed" });
       await expect(safeGenerateContent(mockAi, { contents: [] }))
-        .rejects.toMatchObject({ status: 500 });
-    }, 15000);
+        .rejects.toMatchObject({ status: 400 });
+    });
   });
 });

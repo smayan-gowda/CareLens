@@ -3,13 +3,16 @@ import { motion, AnimatePresence } from "motion/react";
 import { Check, ShieldAlert, ArrowRight, AlertTriangle, RotateCcw, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LensMark } from "@/components/brand/LensMark";
-import { SCAN_STAGES, normalizeBox, type ScanPhase } from "./scanStages";
-import type { ScanResult } from "@/types/ai";
+import { SCAN_STAGES, type ScanPhase } from "./scanStages";
+import type { ScanPhoto, ScanPipelineTrace, ScanResult } from "@/types/ai";
+import { ScanPipelineError, type ScanPhotoInput } from "@/services/ai/analysisService";
+import { normalizeBoundingBox } from "@/utils/spatialGeometry";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 interface AnalysisWorkspaceProps {
   previewUrl: string;
+  photos: ScanPhotoInput[];
   roomName?: string;
   /** Kicks off the real analysis pipeline */
   run: () => Promise<ScanResult>;
@@ -79,13 +82,30 @@ function RevealPanel({
   onContinue: () => void;
 }) {
   const [displayScore, setDisplayScore] = useState(0);
+  const scanPhotos: ScanPhoto[] = result.photos?.length
+    ? result.photos
+    : result.images.map((_, index) => ({
+        id: `legacy-photo-${index}`,
+        role: index === 0 ? "overview" : "detail",
+        label: index === 0 ? "Room overview" : `Photo ${index + 1}`,
+      }));
+  const [selectedPhotoId, setSelectedPhotoId] = useState(scanPhotos[0]?.id || "");
+  const selectedPhotoIndex = Math.max(0, scanPhotos.findIndex((photo) => photo.id === selectedPhotoId));
+  const selectedPhoto = scanPhotos[selectedPhotoIndex];
+  const selectedImageId = selectedPhoto?.id;
+  const displayedImage = result.images[selectedPhotoIndex] || previewUrl;
+  const visibleObjects = (result.detectedObjects || []).filter(
+    (object) => object.imageId === selectedImageId || (!object.imageId && selectedPhotoIndex === 0)
+  );
+  const visibleHazards = result.hazards.filter(
+    (hazard) => hazard.imageId === selectedImageId || (!hazard.imageId && selectedPhotoIndex === 0)
+  );
   const boxes = useMemo(() => {
-    const hazardBoxes = result.hazards
-      .map((h) => {
-        const resolvedBox = resolveHazardBox(h, result.detectedObjects || []);
-        return resolvedBox ? { ...normalizeBox(resolvedBox), label: h.title, tone: "hazard" as const } : null;
+    const hazardBoxes = visibleHazards.flatMap((h) => {
+        const resolvedBox = resolveHazardBox(h, visibleObjects);
+        const box = normalizeBoundingBox(resolvedBox);
+        return box ? [{ ...box, label: h.title, tone: "hazard" as const }] : [];
       })
-      .filter(Boolean)
       .slice(0, 4) as Array<{
       x: number;
       y: number;
@@ -96,11 +116,11 @@ function RevealPanel({
     }>;
 
     if (hazardBoxes.length > 0) return hazardBoxes;
-    return (result.detectedObjects || [])
-      .filter((o) => o.boundingBox)
-      .slice(0, 3)
-      .map((o) => ({ ...normalizeBox(o.boundingBox!), label: o.name, tone: "object" as const }));
-  }, [result]);
+    return visibleObjects.flatMap((object) => {
+      const box = normalizeBoundingBox(object.boundingBox);
+      return box ? [{ ...box, label: object.name, tone: "object" as const }] : [];
+    }).slice(0, 3);
+  }, [result, visibleHazards, visibleObjects]);
 
   useEffect(() => {
     const target = result.safetyScore;
@@ -122,7 +142,7 @@ function RevealPanel({
       : result.safetyScore >= 60
       ? "text-warning"
       : "text-destructive";
-  const topHazards = result.hazards.slice(0, 4);
+  const topHazards = visibleHazards.slice(0, 4);
 
   const narrative =
     result.hazards.length === 0
@@ -141,9 +161,9 @@ function RevealPanel({
       <div className="md:col-span-7 flex justify-center items-center">
         <div className="relative shadow-2xl rounded-lg overflow-hidden border border-border max-w-full bg-black">
           <img
-            src={previewUrl}
+            src={displayedImage}
             className="max-w-full max-h-[60vh] md:max-h-[75vh] w-auto h-auto block object-contain opacity-95"
-            alt="Analyzed room with overlay"
+            alt={`${selectedPhoto?.label || "Room photo"} with analysis overlay`}
           />
           <div className="absolute inset-0 pointer-events-none isolate overflow-hidden">
             {boxes.map((b, i) => (
@@ -173,11 +193,41 @@ function RevealPanel({
           </div>
         </div>
       </div>
+      {scanPhotos.length > 1 && (
+        <div className="md:col-span-7 grid grid-cols-3 gap-2">
+          {scanPhotos.map((photo, index) => (
+            <button
+              key={photo.id}
+              type="button"
+              aria-pressed={photo.id === selectedPhotoId}
+              onClick={() => setSelectedPhotoId(photo.id)}
+              className={`overflow-hidden rounded-lg border text-left transition-colors ${
+                photo.id === selectedPhotoId
+                  ? "border-brand ring-2 ring-brand/30"
+                  : "border-border hover:border-brand/50"
+              }`}
+            >
+              <img
+                src={result.images[index] || previewUrl}
+                alt=""
+                className="h-20 w-full object-cover"
+              />
+              <span className="block truncate px-2 py-1.5 text-[11px] font-medium">
+                {photo.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="md:col-span-5 space-y-6">
         <div>
           <span className="field-tag text-muted-foreground block mb-2">Analysis Complete</span>
           <h2 className="narrative text-3xl md:text-4xl text-balance">{narrative}</h2>
+          <p className="text-xs text-muted-foreground mt-2">
+            {scanPhotos.length} photo{scanPhotos.length === 1 ? "" : "s"} analyzed independently
+            {selectedPhoto ? ` · Viewing ${selectedPhoto.label}` : ""}
+          </p>
         </div>
 
         <div className="flex items-end gap-3 pb-6 border-b border-border">
@@ -231,6 +281,7 @@ function RevealPanel({
 
 export function AnalysisWorkspace({
   previewUrl,
+  photos,
   roomName,
   run,
   onDone,
@@ -240,11 +291,13 @@ export function AnalysisWorkspace({
   const [phase, setPhase] = useState<ScanPhase>("prepare");
   const [result, setResult] = useState<ScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failureTrace, setFailureTrace] = useState<ScanPipelineTrace | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const elapsed = useElapsed();
 
   const executePipeline = () => {
     setErrorMessage(null);
+    setFailureTrace(null);
     setPhase("prepare");
 
     // Phase 1: Prepare payload (quick client-side check)
@@ -276,6 +329,7 @@ export function AnalysisWorkspace({
             err?.message ||
             "Unable to complete room visual analysis. Please ensure your device has internet access and try again.";
           setErrorMessage(msg);
+          setFailureTrace(err instanceof ScanPipelineError ? err.trace : null);
           onError(err);
         });
     }, 800);
@@ -329,6 +383,30 @@ export function AnalysisWorkspace({
                   Your selected room photo has been preserved safely. You can retry the assessment, or return to select another photo.
                 </p>
               </div>
+
+              {failureTrace && (
+                <details className="rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
+                  <summary className="cursor-pointer font-medium text-white">Diagnostic trace</summary>
+                  <div className="mt-3 space-y-2 text-neutral-400">
+                    <p>Scan {failureTrace.scanId} · {failureTrace.failureStage || 'unknown stage'} · {failureTrace.failureCode || 'unknown error'}</p>
+                    {failureTrace.photos.map((photo) => (
+                      <div key={photo.imageId} className="border-t border-white/10 pt-2">
+                        <p className="text-neutral-200">{photo.label} ({photo.role}) · {photo.mimeType}</p>
+                        <p>
+                          {photo.modelAttempts.length} model attempts · parse {photo.parseStatus} · validation {photo.validationStatus}
+                        </p>
+                        {photo.modelAttempts.map((attempt, index) => (
+                          <p key={`${attempt.model}-${attempt.attempt}-${index}`}>
+                            {attempt.model} #{attempt.attempt}: {attempt.outcome}
+                            {attempt.errorCode ? ` (${attempt.errorCode})` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                    <p>This trace contains metadata only, not the uploaded image or API credentials.</p>
+                  </div>
+                </details>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <Button
@@ -400,6 +478,9 @@ export function AnalysisWorkspace({
                     Assessing: <span className="text-white font-medium">{roomName}</span>
                   </div>
                 )}
+                <p className="text-[11px] text-neutral-500">
+                  {photos.length} views will be analyzed one by one so each result remains attached to its source photo.
+                </p>
 
                 <div className="space-y-4">
                   {SCAN_STAGES.map((stage, i) => {

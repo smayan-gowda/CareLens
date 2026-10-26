@@ -3,20 +3,48 @@ import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, ChevronDown, HelpCircle, ArrowRight, Wrench, Clock, DollarSign, Target, Check } from "lucide-react";
 import { toast } from "sonner";
-import type { Recommendation } from "@/types/ai";
+import type {
+  DetectedObject,
+  Hazard,
+  Recommendation,
+  ScanPhoto,
+  SpatialFinding,
+} from "@/types/ai";
 import { estimatedTimeLabel } from "./reportMath";
-import { useScanStore } from "@/stores/scanStore";
+import { RecommendationActionControls } from "@/components/plan/RecommendationActionControls";
 
 interface RecommendationBlocksProps {
   recommendations: Recommendation[];
   currentScore: number;
   scanId?: string;
+  homeId?: string;
+  roomId?: string;
+  photos?: ScanPhoto[];
+  hazards?: Hazard[];
+  detectedObjects?: DetectedObject[];
+  spatialFindings?: SpatialFinding[];
+  onSelectPhoto?: (photoId: string) => void;
+  onSelectObservations?: (observationIds: string[], photoId?: string) => void;
+  onSelectHazard?: (hazardId: string) => void;
+  onSelectSpatialFinding?: (findingId: string) => void;
 }
 
-export function RecommendationBlocks({ recommendations, currentScore, scanId }: RecommendationBlocksProps) {
+export function RecommendationBlocks({
+  recommendations,
+  currentScore,
+  scanId,
+  homeId = "",
+  roomId = "",
+  photos = [],
+  hazards = [],
+  detectedObjects = [],
+  spatialFindings = [],
+  onSelectPhoto,
+  onSelectObservations,
+  onSelectHazard,
+  onSelectSpatialFinding,
+}: RecommendationBlocksProps) {
   const [expandedId, setExpandedId] = useState<string | null>(recommendations[0]?.id ?? null);
-  const { toggleRecommendation } = useScanStore();
-  const [loadingId, setLoadingId] = useState<string | null>(null);
 
   if (recommendations.length === 0) {
     return (
@@ -28,26 +56,6 @@ export function RecommendationBlocks({ recommendations, currentScore, scanId }: 
     );
   }
 
-  const handleToggle = async (rec: Recommendation) => {
-    if (!scanId) {
-      toast.success(rec.completedAt ? "Marked as incomplete" : "Marked as complete");
-      return;
-    }
-    setLoadingId(rec.id);
-    try {
-      const isDoneNow = await toggleRecommendation(scanId, rec.id);
-      if (isDoneNow) {
-        toast.success(`Completed "${rec.title}" (+${rec.expectedImpact} pts)`);
-      } else {
-        toast.info(`Marked "${rec.title}" as pending`);
-      }
-    } catch (e) {
-      toast.error("Failed to update status");
-    } finally {
-      setLoadingId(null);
-    }
-  };
-
   let runningScore = currentScore;
 
   return (
@@ -56,11 +64,21 @@ export function RecommendationBlocks({ recommendations, currentScore, scanId }: 
       <div className="border-t border-border">
         {recommendations.map((rec, index) => {
           const isExpanded = expandedId === rec.id;
-          const isCompleted = !!rec.completedAt;
+          const isCompleted =
+            (rec.actionStatus ?? (rec.completedAt ? 'follow_up_due' : 'open')) === 'verified';
+          const evidencePhotoId = rec.evidencePhotoIds?.[0] ?? rec.imageId;
+          const sourcePhoto = photos.find((photo) => photo.id === evidencePhotoId);
+          const sourceObjects = detectedObjects.filter((object) =>
+            rec.observationIds?.includes(object.id)
+          );
+          const sourceHazards = hazards.filter((hazard) =>
+            rec.relatedHazardIds?.includes(hazard.id)
+          );
+          const sourceFindings = spatialFindings.filter((finding) =>
+            rec.spatialFindingIds?.includes(finding.id)
+          );
 
-          if (!isCompleted) {
-            runningScore = Math.min(100, runningScore + rec.expectedImpact);
-          }
+          runningScore = Math.min(100, runningScore + rec.expectedImpact);
           const projectedAfterThis = runningScore;
 
           return (
@@ -85,12 +103,12 @@ export function RecommendationBlocks({ recommendations, currentScore, scanId }: 
                       </h4>
                       {isCompleted && (
                         <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success/20 text-success font-medium">
-                          <Check className="w-3 h-3" /> Resolved
+                          <Check className="w-3 h-3" /> Verified
                         </span>
                       )}
                     </div>
-                    <span className={`field-tag ${isCompleted ? "text-muted-foreground" : "text-success"} whitespace-nowrap`}>
-                      {isCompleted ? "Resolved" : `+${rec.expectedImpact} pts`}
+                    <span className="field-tag text-muted-foreground whitespace-nowrap">
+                      Estimated potential: +{rec.expectedImpact} pts
                     </span>
                   </div>
                   <p className={`text-muted-foreground leading-relaxed ${!isExpanded ? "line-clamp-1" : ""}`}>{rec.description}</p>
@@ -112,7 +130,111 @@ export function RecommendationBlocks({ recommendations, currentScore, scanId }: 
                     className="overflow-hidden"
                   >
                     <div className="pt-6 mt-2 pl-11">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border mb-6">
+                      <div className="mb-5 rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-foreground">Evidence-to-action trail</span>
+                          <span className="rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground">
+                            {rec.provenance?.origin === "vision-model" ? "AI-generated action" : "Action source not recorded"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Recommendation record <code>{rec.id}</code>
+                          {rec.provenance?.createdAt &&
+                            ` · generated ${new Date(rec.provenance.createdAt).toLocaleString()}`}
+                        </p>
+                        {sourceObjects.length > 0 && (
+                          <div>
+                            <p className="mb-1 text-xs font-medium text-foreground">Supporting visual observations</p>
+                            <ul className="space-y-1 text-xs text-muted-foreground">
+                              {sourceObjects.map((object) => (
+                                <li key={object.id} className="flex flex-wrap items-center gap-2">
+                                  <code>{object.id}</code>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-auto px-1 py-0 text-xs"
+                                    onClick={() => {
+                                      onSelectObservations?.([object.id], evidencePhotoId);
+                                      document.getElementById("images")?.scrollIntoView({
+                                        behavior: "smooth",
+                                        block: "center",
+                                      });
+                                    }}
+                                  >
+                                    Locate {object.name} in photo
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {sourceHazards.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {sourceHazards.map((hazard) => (
+                              <Button
+                                key={hazard.id}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  onSelectHazard?.(hazard.id);
+                                  document.getElementById("findings")?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "center",
+                                  });
+                                }}
+                              >
+                                Open linked concern: {hazard.title}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                        {sourceFindings.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {sourceFindings.map((finding) => (
+                              <Button
+                                key={finding.id}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  onSelectSpatialFinding?.(finding.id);
+                                  document.getElementById("spatial-findings")?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "center",
+                                  });
+                                }}
+                              >
+                                Open linked geometry: {finding.relationType.replaceAll("-", " ")}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                        {sourceObjects.length === 0 && sourceHazards.length === 0 && sourceFindings.length === 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            No observation, concern, or geometric finding is explicitly linked to this action.
+                            The photo is context only, not proof of the recommendation&apos;s cause.
+                          </p>
+                        )}
+                        {sourcePhoto && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              onSelectPhoto?.(sourcePhoto.id);
+                              document.getElementById("images")?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                              });
+                            }}
+                          >
+                            View source photo: {sourcePhoto.label} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border mb-6">
                         {[
                           [Target, "Priority", rec.priority],
                           [DollarSign, "Est. cost", rec.estimatedCost],
@@ -128,12 +250,9 @@ export function RecommendationBlocks({ recommendations, currentScore, scanId }: 
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-6 mb-6 text-sm">
-                        <span className="text-muted-foreground">
-                          {isCompleted ? "Action status:" : "Score after this change:"}
-                        </span>
-                        <span className="tabular font-semibold text-success text-base">
-                          {isCompleted ? "Completed ✓" : projectedAfterThis}
+                      <div className="flex items-center gap-2 mb-6 text-xs text-muted-foreground">
+                        <span>
+                          Illustrative score scenario only: {projectedAfterThis}/100. Action status never changes the measured safety score.
                         </span>
                       </div>
 
@@ -146,18 +265,20 @@ export function RecommendationBlocks({ recommendations, currentScore, scanId }: 
                         </div>
                       )}
 
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant={isCompleted ? "outline" : "brand"}
-                          size="sm"
-                          disabled={loadingId === rec.id}
-                          onClick={() => handleToggle(rec)}
-                        >
-                          {isCompleted ? "Mark as Pending" : "Mark as Complete"}
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => toast.info("Saved for later")}>
-                          Save for Later
-                        </Button>
+                      {scanId && !scanId.startsWith("sample-") && (
+                        <RecommendationActionControls
+                          recommendation={rec}
+                          scanId={scanId}
+                          homeId={homeId}
+                          roomId={roomId}
+                        />
+                      )}
+                      {scanId?.startsWith("sample-") && (
+                        <p className="text-xs text-muted-foreground">
+                          Reference assessment actions are examples; create your own room assessment to track these steps.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-3">
                         <Button variant="ghost" size="sm" className="ml-auto text-brand" onClick={() => toast.info("Looking for local pros nearby")}>
                           Find Local Pros <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                         </Button>

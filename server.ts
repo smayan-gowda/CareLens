@@ -1,13 +1,18 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
+import { createHash } from "node:crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, LiveServerMessage, Modality } from "@google/genai";
 import { HfInference } from "@huggingface/inference";
 import { WebSocketServer } from "ws";
 import { ROOM_ANALYSIS_PROMPT } from "./src/services/ai/prompts";
 
-import { safeGenerateContent, safeTranscribeAudio } from "./src/services/ai/aiUtils";
+import { safeGenerateContent, safeTranscribeAudio, type ModelAttemptEvent } from "./src/services/ai/aiUtils";
+import { parseJsonObjectResponse } from "./src/services/ai/jsonResponseParser";
+import { validateSafetyAnalysis } from "./src/services/ai/analysisValidation";
+import type { PipelinePhotoTrace } from "./src/types/ai";
+import { extractGeneratedImage } from "./src/services/ai/generatedImageResult";
 
 function getFallbackRoomAnalysis(roomType: string = "Bathroom"): any {
   const normalizedType = (roomType || "Bathroom").trim().toLowerCase();
@@ -675,36 +680,30 @@ async function startServer() {
 
   // AI Route
   app.post("/api/analyze-room", async (req, res) => {
+    let photoTrace: PipelinePhotoTrace | undefined;
+    let failureStage: 'model' | 'parse' | 'validation' | undefined;
+    let failureCode = 'analysis_failed';
     try {
-      const { imageBase64, imagesBase64, roomType } = req.body;
+      const { imageBase64, imagesBase64, roomType, imageId, photoRole, photoLabel } = req.body;
       
       const imagesToProcess = imagesBase64 && Array.isArray(imagesBase64) && imagesBase64.length > 0 
         ? imagesBase64 
         : [imageBase64];
+
+      if (imagesToProcess.length !== 1 || !imagesToProcess[0]) {
+        return res.status(400).json({
+          error: "Analyze one room photo at a time so detected coordinates always refer to the correct photo."
+        });
+      }
+      if (photoRole !== 'overview' && photoRole !== 'detail') {
+        return res.status(400).json({ error: "A valid room photo role is required." });
+      }
       
       const totalSize = imagesToProcess.reduce((sum: number, img: string) => sum + (img?.length || 0), 0);
       if (totalSize > 30 * 1024 * 1024) { 
         return res.status(400).json({ error: "Image payload too large. Please use smaller images." });
       }
 
-      const customKey = (req.headers["x-custom-gemini-key"] as string) || (req.body?.customGeminiKey as string);
-      const effectiveKey = (customKey && customKey.trim().length > 0) ? customKey.trim() : process.env.GEMINI_API_KEY;
-
-      if (!effectiveKey) {
-        return res.status(500).json({ 
-          error: "No Gemini API key configured. Please enter your free API key from Google AI Studio (aistudio.google.com/app/apikey) in the AI Engine settings." 
-        });
-      }
-
-      const ai = new GoogleGenAI({ 
-        apiKey: effectiveKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-      
       const parts: any[] = [];
 
       for (const imgBase64 of imagesToProcess) {
@@ -718,16 +717,38 @@ async function startServer() {
             const buffer = await imgRes.arrayBuffer();
             pureBase64 = Buffer.from(buffer).toString('base64');
             mimeType = imgRes.headers.get('content-type') || "image/jpeg";
-          } catch (fetchErr) {
-            console.error("Failed to fetch remote image:", fetchErr);
-            continue; // Skip failed image instead of failing everything
+          } catch {
+            throw new Error("Unable to load the selected room photo for analysis.");
           }
         } else if (imgBase64.startsWith("data:")) {
           const splitParts = imgBase64.split(",");
+          if (splitParts.length !== 2) {
+            failureStage = 'parse';
+            failureCode = 'invalid_image_data_url';
+            throw new Error("Invalid image data.");
+          }
           pureBase64 = splitParts[1];
           mimeType = splitParts[0].split(":")[1].split(";")[0];
         }
 
+        const imageBytes = Buffer.from(pureBase64, 'base64');
+        if (imageBytes.length === 0) {
+          failureStage = 'parse';
+          failureCode = 'empty_image';
+          throw new Error("Selected photo is empty.");
+        }
+        photoTrace = {
+          imageId: typeof imageId === 'string' && imageId.length <= 128 ? imageId : 'unidentified-photo',
+          role: photoRole === 'overview' ? 'overview' : 'detail',
+          label: typeof photoLabel === 'string' ? photoLabel.slice(0, 200) : 'Room photo',
+          mimeType: mimeType.slice(0, 100),
+          byteLength: imageBytes.length,
+          sha256: createHash('sha256').update(imageBytes).digest('hex'),
+          modelAttempts: [],
+          parseStatus: 'not_started',
+          validationStatus: 'not_started',
+          outcome: 'failed',
+        };
         parts.push({
           inlineData: {
             mimeType,
@@ -736,9 +757,28 @@ async function startServer() {
         });
       }
 
-      const promptText = `The room type is ${roomType || 'unknown'}.\n\n${ROOM_ANALYSIS_PROMPT}\n\nIMPORTANT: You have been provided with multiple images. The FIRST image is the full room view. The subsequent images are zoomed-in quadrants of the same room to help you see more detail. ALL BOUNDING BOXES you return MUST be calculated relative to the FIRST (full) image.`;
+      const customKey = (req.headers["x-custom-gemini-key"] as string) || (req.body?.customGeminiKey as string);
+      const effectiveKey = (customKey && customKey.trim().length > 0) ? customKey.trim() : process.env.GEMINI_API_KEY;
+
+      if (!effectiveKey) {
+        failureStage = 'model';
+        failureCode = 'missing_api_key';
+        throw new Error("No Gemini API key configured. Please enter your free API key from Google AI Studio (aistudio.google.com/app/apikey) in the AI Engine settings.");
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: effectiveKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const promptText = `The room type is ${roomType || 'unknown'}.\n\n${ROOM_ANALYSIS_PROMPT}\n\nIMPORTANT: You have been provided with exactly one room photo. Every bounding box must be normalized to this exact photo. Do not infer or combine evidence from other views.`;
       parts.push({ text: promptText });
 
+      failureStage = 'model';
       const response = await safeGenerateContent(ai, {
         contents: { parts },
         config: {
@@ -843,33 +883,80 @@ async function startServer() {
             required: ["roomType", "confidence", "overallSafetyScore", "subScores", "detectedObjects", "hazards", "recommendations"]
           }
         }
+      }, {
+        onAttempt: (attempt: ModelAttemptEvent) => photoTrace?.modelAttempts.push(attempt),
       });
 
       if (response.text) {
-        let jsonString = response.text.trim();
-        if (jsonString.startsWith('```json')) {
-            jsonString = jsonString.slice(7, -3);
+        failureStage = 'parse';
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = parseJsonObjectResponse(response.text);
+          if (photoTrace) photoTrace.parseStatus = 'passed';
+        } catch {
+          failureCode = 'invalid_model_json';
+          if (photoTrace) {
+            photoTrace.parseStatus = 'failed';
+            photoTrace.failureCode = failureCode;
+          }
+          throw new Error("The analysis service returned an unreadable result.");
         }
-        const json = JSON.parse(jsonString);
-        res.json(json);
+
+        failureStage = 'validation';
+        const validation = validateSafetyAnalysis(parsed);
+        if (validation.success === false) {
+          failureCode = 'schema_validation_failed';
+          if (photoTrace) {
+            photoTrace.validationStatus = 'failed';
+            photoTrace.validationIssues = validation.issues;
+            photoTrace.failureCode = failureCode;
+          }
+          throw new Error("The analysis service returned an invalid result.");
+        }
+        if (photoTrace) {
+          photoTrace.validationStatus = 'passed';
+          photoTrace.selectedModel = [...photoTrace.modelAttempts].reverse().find(({ outcome }) => outcome === 'success')?.model;
+          const reportedVersion = (response as { modelVersion?: unknown }).modelVersion;
+          if (typeof reportedVersion === 'string') photoTrace.reportedModelVersion = reportedVersion.slice(0, 100);
+          photoTrace.outcome = 'completed';
+        }
+        res.json({ analysis: validation.data, photoTrace });
       } else {
-        throw new Error("No text response from Gemini");
+        failureStage = 'parse';
+        failureCode = 'empty_model_response';
+        if (photoTrace) photoTrace.failureCode = failureCode;
+        throw new Error("The analysis service returned an empty result.");
       }
       
     } catch (error: any) {
-      console.error("Gemini API error in /api/analyze-room:", error);
-      const isRateLimit =
-        error?.status === 429 ||
-        error?.message?.toLowerCase().includes("quota") ||
-        error?.message?.toLowerCase().includes("rate limit") ||
-        error?.message?.includes("RESOURCE_EXHAUSTED");
+      const status = Number(error?.status);
+      const isRateLimit = status === 429;
+      if (!failureStage) failureStage = 'model';
+      if (failureCode === 'analysis_failed') {
+        failureCode = Number.isInteger(status) && status >= 400 && status <= 599
+          ? `http_${status}`
+          : 'provider_error';
+      }
+      if (photoTrace) {
+        photoTrace.failureCode = failureCode;
+        photoTrace.outcome = 'failed';
+      }
       if (isRateLimit) {
         return res.status(429).json({
-          error: "API rate limit reached. The service allows 5 requests per minute. Please wait 60 seconds and try again."
+          error: "API rate limit reached. The service allows 5 requests per minute. Please wait 60 seconds and try again.",
+          photoTrace,
+          failureStage,
+          failureCode,
         });
       }
-      res.status(500).json({ 
-        error: error?.message || "Failed to analyze room image. Please try again or select another angle." 
+      const isConfigurationFailure = failureCode === 'missing_api_key';
+      res.status(isConfigurationFailure ? 500 : 502).json({
+        error: isConfigurationFailure
+          ? "No Gemini API key configured. Please enter your free API key from Google AI Studio (aistudio.google.com/app/apikey) in the AI Engine settings."
+          : "Failed to analyze room image. Please try again or select another angle.",
+        photoTrace,
+        failureStage,
+        failureCode,
       });
     }
   });
@@ -909,7 +996,14 @@ async function startServer() {
       }
 
       // Agnes AI API configuration
-      const agnesApiKey = process.env.AGNES_API_KEY || 'sk-0nnrqE1AhxNghlnE0dFYbXimUjxVHaghqeW2NMA8loXV1XU0';
+      const agnesApiKey = process.env.AGNES_API_KEY;
+      if (!agnesApiKey) {
+        return res.status(400).json({
+          success: false,
+          error: "ai_generation_unavailable",
+          errors: ["Agnes image generation is optional. Set AGNES_API_KEY to enable it."]
+        });
+      }
 
       let generatedPrompt = `Transform the room to simultaneously install and clearly display ALL of the following safety and accessibility features: ${upgrades.join('; ')}. Every single one of these items must be separately, clearly, and visibly added to the room in their appropriate, logical locations. Keep the original room layout, flooring, walls, lighting, and major furniture identical. Photographic, realistic, 4k, interior design, high visual density, all safety features visible.`;
 
@@ -968,21 +1062,23 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
         body: JSON.stringify(payload)
       });
 
-      const agnesData = await agnesRes.json();
-
-      if (agnesRes.ok && agnesData.data && agnesData.data.length > 0 && agnesData.data[0].url) {
-        const generatedImageUrl = agnesData.data[0].url;
-        console.log("Agnes AI image-to-image generation successful:", generatedImageUrl);
-        res.json({ success: true, image: generatedImageUrl });
-      } else {
-        const errMsg = agnesData?.error?.message || "Failed to generate image via Agnes AI";
-        console.error("Agnes AI failed:", agnesData);
-        res.json({
+      const agnesData = await agnesRes.json().catch(() => null);
+      const generatedImage = extractGeneratedImage(agnesData);
+      if (!agnesRes.ok || !generatedImage) {
+        const errMsg =
+          agnesData?.error?.message ||
+          agnesData?.message ||
+          `Agnes AI returned HTTP ${agnesRes.status} without a supported image result`;
+        console.error("Agnes AI did not return a usable image:", errMsg);
+        return res.status(502).json({
           success: false,
           error: "ai_generation_unavailable",
           errors: [errMsg]
         });
       }
+
+      console.log("Agnes AI image-to-image generation returned a usable image");
+      res.json({ success: true, image: generatedImage });
 
     } catch (error: any) {
       console.error("Error generating safety visualization:", error);
@@ -995,7 +1091,7 @@ CRITICAL INSTRUCTIONS FOR THE PROMPT YOU GENERATE:
     try {
       const { latitude, longitude, term, categories, radius } = req.query;
       
-      const apiKey = process.env.YELP_API_KEY || "yJnQFDePNHIKH70RXNDjybSBUnFPB9jo3swVq2dpqUcKKO4fs8qPzF4p58hx0_Mz-H3IxFKwh5DyMXGob0JOjfrXaFen_GqDSiVBOU4tkY3rRoUen-Gj8FVJiIXZanYx";
+      const apiKey = process.env.YELP_API_KEY;
 
       if (!apiKey) {
         return res.status(400).json({ error: "Yelp API key is missing. Please set YELP_API_KEY." });

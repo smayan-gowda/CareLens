@@ -282,6 +282,12 @@ export function BeforeAfterPreview({ originalImage, recommendations, hazards = [
  className="absolute inset-0 w-full h-full object-cover pointer-events-none" 
  alt="After" 
  referrerPolicy="no-referrer"
+ onError={() => {
+   if (visualizedImage) {
+     setVisualizedImage(null);
+     setApiError("The generated image could not be displayed; showing the interactive overlay instead.");
+   }
+ }}
  />
  
  {/* Apply styling or physical overlays if we didn't get an AI generated image */}
@@ -481,7 +487,7 @@ export function BeforeAfterPreview({ originalImage, recommendations, hazards = [
  We have applied our highly accurate, interactive visual overlay to show you exactly where safety grab bars, non-slip rubber mats, cleared pathways, and safety lighting would be installed. Hover or tap the green checkmark pins above to preview each recommendation.
  </p>
  <p className="text-warning leading-relaxed text-[11px] pt-1">
- <strong>Why did the high-fidelity AI render fall back?</strong> Google AI Studio's free-tier keys restrict access to image-generating models (like Imagen) and multimodal edit features. Additionally, the sandbox preview environment secures outbound DNS requests, meaning third-party model connections (like Hugging Face) are deferred until standalone production deployment.
+ Agnes AI image generation was unavailable or returned an image that could not be displayed. This local interactive overlay is a visual guide, not a generated edit of the room.
  </p>
  
  {apiErrors && apiErrors.length > 0 && (
@@ -513,7 +519,7 @@ export function BeforeAfterPreview({ originalImage, recommendations, hazards = [
  {visualizedImage ? (
  <>
  <Sparkles className="h-3 w-3 text-brand animate-pulse" />
- <span>Visual upgrades realistically generated using Gemini AI. Drag slider to compare.</span>
+ <span>Visual upgrades generated using Agnes AI. Drag slider to compare.</span>
  </>
  ) : (
  <>

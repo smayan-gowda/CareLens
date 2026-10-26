@@ -1,7 +1,7 @@
 import { Hazard } from "@/types/ai";
 import { SafetyAnalysis } from "./schemas";
 
-export function extractHazards(analysis: SafetyAnalysis, scanId: string): Hazard[] {
+export function extractHazards(analysis: SafetyAnalysis, scanId: string, imageId?: string): Hazard[] {
   return analysis.hazards.map((h, i) => {
     const severity = (h.severity.charAt(0).toUpperCase() + h.severity.slice(1)) as any;
     const visibleObs = h.visibleObservation || h.description || "Visible item observed in current camera view";
@@ -11,7 +11,7 @@ export function extractHazards(analysis: SafetyAnalysis, scanId: string): Hazard
     const nextStep = h.suggestedNextStep || "Review finding with resident or primary caregiver and conduct physical verification.";
 
     return {
-      id: `haz-${Date.now()}-${i}`,
+      id: `hazard-${scanId}-${imageId ?? "unscoped"}-${i}`,
       title: h.title,
       severity,
       confidence: h.confidence,
@@ -27,7 +27,7 @@ export function extractHazards(analysis: SafetyAnalysis, scanId: string): Hazard
       objectsInvolved: h.objectsInvolved,
       reasoning: h.reasoning || visibleObs,
       boundingBox: h.boundingBox,
-      feedback: 'needs_review',
+      imageId,
       reviewStatus: 'unresolved',
       humanVerificationNote: verifReq,
       suggestedAction: nextStep,

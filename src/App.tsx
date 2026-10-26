@@ -26,6 +26,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PhotoVaultPage } from "./pages/PhotoVaultPage";
 import { MobileUploadPage } from "./pages/MobileUploadPage";
+import { ImprovementPlanPage } from "./pages/ImprovementPlanPage";
 import { useHomeStore } from "./stores/useHomeStore";
 import { useScanStore } from "./stores/scanStore";
 import { useStagingStore } from "./stores/useStagingStore";
@@ -97,6 +98,7 @@ export default function App() {
               <Route path="/properties/:homeId/rooms/new" element={<RoomCreatePage />} />
               <Route path="/properties/:homeId/rooms/:roomId" element={<RoomDetailPage />} />
               <Route path="/assessments" element={<ReportsPage />} />
+              <Route path="/improvement-plan" element={<ImprovementPlanPage />} />
               <Route path="/progress" element={<TimelinePage />} />
               <Route path="/marketplace" element={<ResourcesPage />} />
               <Route path="/profile" element={<SettingsPage />} />

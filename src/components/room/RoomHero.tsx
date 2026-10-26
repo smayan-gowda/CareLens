@@ -17,12 +17,17 @@ export function RoomHero({ room, heroImage, latestScan }: RoomHeroProps) {
 
   const potential = latestScan ? projectedScore(latestScan.safetyScore, latestScan.recommendations) : undefined;
   const gain = potential && latestScan ? potential - latestScan.safetyScore : 0;
-  const topRec = latestScan?.recommendations?.[0];
+  const openActionCount = latestScan?.recommendations?.filter((recommendation) => {
+    const status =
+      recommendation.actionStatus ??
+      (recommendation.completedAt ? "follow_up_due" : "open");
+    return status !== "verified" && status !== "dismissed";
+  }).length ?? 0;
 
   const oneLiner = !latestScan
     ? "No assessments yet — run a scan to see how this room is doing."
-    : gain > 0 && topRec
-    ? `One recommendation could increase safety by ${topRec.expectedImpact} points.`
+    : gain > 0 && openActionCount > 0
+    ? `Your improvement plan has ${openActionCount} open actions. A new assessment is needed to measure any changes.`
     : latestScan.hazards.length === 0
     ? "Nothing needs your attention here right now."
     : "A few small things are worth a look.";
